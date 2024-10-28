@@ -39,7 +39,7 @@
 
  character(len=512) :: orog_path, rst_path_full, inc_path_full
  character(len=256) :: rst_path, inc_path
- character*20       :: otype ! orography filename stub. For atm only, oro_C${RES}, for atm/ocean oro_C${RES}.mx100
+ character(len=20)  :: otype ! orography filename stub. For atm only, oro_C${RES}, for atm/ocean oro_C${RES}.mx100
 
  character(len=512) :: restart_file
  character(len=1)   :: tilech
