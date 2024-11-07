@@ -51,7 +51,6 @@
     call mpi_comm_size(mpi_comm_world, nprocs, ierr)
     call mpi_comm_rank(mpi_comm_world, myrank, ierr)
 
-    print*
     print*,"starting apply_incr_noahmp_snow program on rank ", myrank, ' of ', nprocs, ' procs'
 
     ! SET NAMELIST DEFAULTS
@@ -62,7 +61,6 @@
     ens_size = 1
 
     ! READ NAMELIST 
-
     inquire (file='apply_incr_nml', exist=file_exists) 
 
     if (.not. file_exists) then
@@ -78,11 +76,6 @@
         write(6,*) trim(ioerrmsg)         
         call mpi_abort(mpi_comm_world, 10)
     end if
-    ! uncommenting this may help catch a namelist error
-    ! if (myrank==0) then
-    !    write (6, noahmp_snow)
-    ! !    print*, 'ens_size ', ens_size, ' ntiles ', ntiles
-    ! end if
 
     ! SET VARIABLE NAMES FOR SNOW OVER LAND AND GRID
     if (frac_grid) then 
@@ -108,19 +101,16 @@
             rst_path_full = trim(rst_path)//"/mem"//ens_str//"/"
             inc_path_full = trim(inc_path)//"/mem"//ens_str//"/"
         else
-            rst_path_full = trim(rst_path)      !//"/mem000/"
-            inc_path_full = trim(inc_path)      !//"/mem000/"
+            rst_path_full = trim(rst_path)      
+            inc_path_full = trim(inc_path)      
         endif
 
-        print*
         print*, "Proc ", myrank, " ensemble member ", ens_mem, " tile ", tile_num
 
         ! GET MAPPING INDEX (see subroutine comments re: source of land/sea mask)
-
         call get_fv3_mapping(myrank, ens_mem, tile_num, rst_path_full, date_str, hour_str, res, len_land_vec, frac_grid, tile2vector)
     
-        ! SET-UP THE NOAH-MP STATE  AND INCREMENT
-        
+        ! SET-UP THE NOAH-MP STATE  AND INCREMENT        
         ! The allocations are inside the loop because different ensemble members could have different len_land_vec
         allocate(noahmp_state%swe                (len_land_vec)) ! values over land only
         allocate(noahmp_state%snow_depth         (len_land_vec)) ! values over land only 
@@ -145,11 +135,10 @@
         write(tilech, '(i1.1)') (tile_num)
         restart_file = trim(rst_path_full)//"/"//date_str//"."//hour_str//"0000.sfc_data.tile"//tilech//".nc"
 
-        call   read_fv3_restart(trim(restart_file), res, ncid, &          !tile_num, rst_path_full, date_str, hour_str, 
+        call   read_fv3_restart(trim(restart_file), res, ncid, &         
                     len_land_vec, tile2vector, frac_grid, noahmp_state, grid_state)
 
         ! READ SNOW DEPTH INCREMENT
-
         call   read_fv3_increment(tile_num, inc_path_full, date_str, hour_str, res, &
                     len_land_vec, tile2vector, noahmp_state%name_snow_depth, increment)
     
@@ -159,12 +148,10 @@
         endif 
 
         ! ADJUST THE SNOW STATES OVER LAND
-
-!TBCL: return and check error code from this call (for now assume it is well handled inside function)
+!TODO: return and check error code from this call (for now assume it is well handled inside function)
         call UpdateAllLayers(len_land_vec, increment, noahmp_state)
 
         ! IF FRAC GRID, ADJUST SNOW STATES OVER GRID CELL
-
         if (frac_grid) then
 
             ! get the land frac 
@@ -181,13 +168,10 @@
         endif
 
         ! WRITE OUT ADJUSTED RESTART
-
         call   write_fv3_restart(trim(restart_file), noahmp_state, grid_state, res, ncid, len_land_vec, & 
                     frac_grid, tile2vector) 
 
         ! CLOSE RESTART FILE 
-        ! print*
-        ! print*,"apply_incr_noahmp_snow, closing restart on proc ", myrank, " ensemble member ", ens_mem, " tile ", tile_num
         ierr = nf90_close(ncid)
         call netcdf_err( ierr, "closing restart file "//trim(restart_file) )
         
@@ -212,19 +196,15 @@
             deallocate(snow_depth_back) !
         endif
 
-        ! print*
-        ! print*, "finisheed loop proc ", myrank, " ensemble member ", ens_mem, " tile ", tile_num
-
     enddo
 
-    print*, "Finisheed on proc ", myrank
+    print*, "apply_incr_noahmp_snow finisheed on proc ", myrank
     call mpi_finalize(ierr)
 
  contains 
 
 !--------------------------------------------------------------
-! if at netcdf call returns an error, print out a message
-! and stop processing.
+! if at netcdf call returns an error, print out a message and stop processing.
 !--------------------------------------------------------------
  subroutine netcdf_err( err, string )
 
@@ -300,8 +280,6 @@
             call mpi_abort(mpi_comm_world, 10) 
     endif
 
-    ! write (6, *) 'calculate mapping from land mask in ', trim(restart_file)
-
     ierr=nf90_open(trim(restart_file),nf90_write,ncid)
     call netcdf_err(ierr, 'opening file: '//trim(restart_file) )
 
@@ -373,7 +351,7 @@ end subroutine get_fv3_mapping
 ! open fv3 restart, and read in required variables
 ! file is opened as read/write and remains open
 !--------------------------------------------------------------
- subroutine read_fv3_restart(restart_file, res, ncid, &                      !tile_num, rst_path, date_str, hour_str, 
+ subroutine read_fv3_restart(restart_file, res, ncid, & 
                 len_land_vec,tile2vector, frac_grid, noahmp_state, grid_state)
 
  implicit none 
@@ -382,8 +360,6 @@ end subroutine get_fv3_mapping
 
  integer, intent(in) :: res, len_land_vec   !tile_num, 
  character(len=*), intent(in) :: restart_file  !rst_path
-!  character(len=8), intent(in) :: date_str 
-!  character(len=2), intent(in) :: hour_str 
  integer, intent(in) :: tile2vector(len_land_vec,2)
  logical, intent(in) :: frac_grid
 
@@ -391,14 +367,11 @@ end subroutine get_fv3_mapping
  type(noahmp_type), intent(inout)  :: noahmp_state
  type(grid_type), intent(inout)  :: grid_state
 
-!  character(len=512) :: restart_file
-!  character(len=1) :: rankch
  logical :: file_exists
  integer :: ierr, id_dim, fres
  integer :: nn
 
     ! OPEN FILE
-
     inquire(file=trim(restart_file), exist=file_exists)
 
     if (.not. file_exists) then
@@ -406,8 +379,6 @@ end subroutine get_fv3_mapping
                     trim(restart_file) , ' exiting'
             call mpi_abort(mpi_comm_world, 10) 
     endif
-
-    ! write (6, *) 'opening ', trim(restart_file)
 
     ierr=nf90_open(trim(restart_file),nf90_write,ncid)
     call netcdf_err(ierr, 'opening file: '//trim(restart_file) )
@@ -507,8 +478,6 @@ end subroutine read_fv3_restart
             call mpi_abort(mpi_comm_world, 10) 
     endif
 
-    ! write (6, *) 'opening ', trim(filename)
-
     ierr=nf90_open(trim(filename),nf90_nowrite,ncid)
     call netcdf_err(ierr, 'opening file: '//trim(filename) )
 
@@ -528,8 +497,6 @@ end subroutine read_fv3_restart
                         'land_frac  ', grid_state%land_frac)
 
     ! close file 
-    ! write (6, *) 'closing ', trim(filename)
-
     ierr=nf90_close(ncid)
     call netcdf_err(ierr, 'closing file: '//trim(filename) )
 
@@ -561,8 +528,6 @@ end subroutine read_fv3_orog
  integer :: id_dim, id_var, fres, ncid
  integer :: nn
 
-
- 
     ! OPEN FILE
     write(rankch, '(i1.1)') (tile_num)
     incr_file = trim(inc_path)//"/"//"snowinc."//date_str//"."//hour_str//"0000.sfc_data.tile"//rankch//".nc"
@@ -574,8 +539,6 @@ end subroutine read_fv3_orog
                     trim(incr_file) , ' exiting'
             call mpi_abort(mpi_comm_world, 10) 
     endif
-
-    ! write (6, *) 'opening ', trim(incr_file)
 
     ierr=nf90_open(trim(incr_file),nf90_nowrite,ncid)
     call netcdf_err(ierr, 'opening file: '//trim(incr_file) )
@@ -595,9 +558,6 @@ end subroutine read_fv3_orog
     call read_nc_var2D(ncid, trim(incr_file), len_land_vec, res, tile2vector, 0, & 
                         control_var, increment)
 
-    ! close file 
-    ! write (6, *) 'closing ', trim(incr_file)
-
     ierr=nf90_close(ncid)
     call netcdf_err(ierr, 'closing file: '//trim(incr_file) )
 
@@ -607,7 +567,6 @@ end subroutine  read_fv3_increment
 ! Subroutine to read in a 2D variable from netcdf file, 
 ! and save to noahmp vector
 !--------------------------------------------------------
-
 subroutine read_nc_var2D(ncid, file_name, len_land_vec, res, tile2vector, in3D_vdim,  & 
                          var_name, data_vec)
 
@@ -646,7 +605,6 @@ end subroutine read_nc_var2D
 ! Subroutine to read in a 3D variable from netcdf file, 
 ! and save to noahmp vector
 !--------------------------------------------------------
-
 subroutine read_nc_var3D(ncid, file_name, len_land_vec, res, vdim,  & 
                 tile2vector, var_name, data_vec)
 
@@ -684,7 +642,6 @@ end subroutine read_nc_var3D
  type(grid_type), intent(in) :: grid_state
  logical, intent(in) :: frac_grid
  integer, intent(in) :: tile2vector(len_land_vec,2)
-
  
    ! write swe over land (file name: sheleg, vert dim 1) 
     call write_nc_var2D(ncid, trim(file_name), len_land_vec, res, tile2vector, 0, & 
@@ -739,7 +696,6 @@ end subroutine read_nc_var3D
 !--------------------------------------------------------
 ! Subroutine to write a 2D variable to the netcdf file 
 !--------------------------------------------------------
-
 subroutine write_nc_var2D(ncid, file_name, len_land_vec, res, tile2vector,   & 
                 in3D_vdim, var_name, data_vec)
 
@@ -788,7 +744,6 @@ end subroutine write_nc_var2D
 !--------------------------------------------------------
 ! Subroutine to write a 3D variable to the netcdf file 
 !--------------------------------------------------------
-
 subroutine write_nc_var3D(ncid, file_name, len_land_vec, res, vdim, & 
                 tile2vector, var_name, data_vec)
 
