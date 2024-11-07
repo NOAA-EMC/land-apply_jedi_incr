@@ -46,7 +46,7 @@
  character(len=512) :: ioerrmsg
 
  namelist /noahmp_snow/ date_str, hour_str, res, frac_grid, rst_path, inc_path, orog_path, otype, ntiles, ens_size
-!
+
     call mpi_init(ierr)
     call mpi_comm_size(mpi_comm_world, nprocs, ierr)
     call mpi_comm_rank(mpi_comm_world, myrank, ierr)
