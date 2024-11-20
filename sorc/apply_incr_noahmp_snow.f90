@@ -330,7 +330,7 @@
         enddo 
     enddo
     
-    write(6,*) 'Number of land points on proc ', myrank, 'ensmem ', ens_mem, ' tilenum ', tile_num, ' :',  len_land_vec
+    ! write(6,*) 'Number of land points on proc ', myrank, 'ensmem ', ens_mem, ' tilenum ', tile_num, ' :',  len_land_vec
 
     allocate(tile2vector(len_land_vec,2)) 
 

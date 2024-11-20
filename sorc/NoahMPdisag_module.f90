@@ -26,7 +26,7 @@ module NoahMPdisag_module
 
 contains
 
-  subroutine UpdateAllLayers(vector_length, increment, noahmp)
+  subroutine UpdateAllLayers(vector_length, increment, noahmp, print_summary)
 
  ! intent(in)
   integer, intent(in)                :: vector_length
@@ -35,12 +35,19 @@ contains
 ! intent(inout)
   type(noahmp_type), intent(inout)   :: noahmp
 
+  logical, intent(in), optional      :: print_summary
+
   double precision       :: layer_density, swe_increment, liq_ratio
   integer                :: iloc, ilayer, iinter, active_layers, vector_loc, pathway
   double precision       :: soil_interfaces(7) = (/0.0,0.0,0.0,0.1,0.4,1.0,2.0/)
   double precision       :: partition_ratio, layer_depths(3), anal_snow_depth
   double precision       :: temp_soil_corr
   integer                :: count0, count1, count2, count3, count4, count5, count6, count7
+
+  logical                :: print_out_summary
+  
+  print_out_summary = .false.
+  if (present(print_summary)) print_out_summary = print_summary
 
   associate( &
                  swe => noahmp%swe                ,&
@@ -271,15 +278,19 @@ contains
 
   end do
 
-  print *, "Noah-MP snow increment summary:"
-  print *, "No increments added: ", count0
-  print *, "Increment removed all snow", count1
-  print *, "Increment added snow in multi-layer mode", count2
-  print *, "Increment removed snow in multi-layer mode", count3
-  print *, "Increment added snow in zero-layer mode", count4
-  print *, "Increment not added in zero-layer mode, too warm", count5
-  print *, "Increment added in zero-layer mode, added a layer", count6
-  print *, "Increment removed snow in zero-layer mode", count7
+  if (print_out_summary) then 
+
+    print *, "Noah-MP snow increment summary:"
+    print *, "No increments added: ", count0
+    print *, "Increment removed all snow", count1
+    print *, "Increment added snow in multi-layer mode", count2
+    print *, "Increment removed snow in multi-layer mode", count3
+    print *, "Increment added snow in zero-layer mode", count4
+    print *, "Increment not added in zero-layer mode, too warm", count5
+    print *, "Increment added in zero-layer mode, added a layer", count6
+    print *, "Increment removed snow in zero-layer mode", count7
+
+  endif
 
   end associate
 
