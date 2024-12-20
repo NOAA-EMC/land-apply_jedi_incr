@@ -169,7 +169,7 @@
         call   write_fv3_restart(trim(restart_file), noahmp_state, grid_state, res, ncid, len_land_vec, & 
                     frac_grid, tile2vector) 
 
-        ! CLOSE RESTART FILE
+        ! CLOSE RESTART FILE 
         ierr = nf90_close(ncid)
         call netcdf_err( ierr, "closing restart file "//trim(restart_file) )
         
