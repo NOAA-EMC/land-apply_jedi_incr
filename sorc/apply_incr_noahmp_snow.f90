@@ -51,7 +51,7 @@
     call mpi_comm_size(mpi_comm_world, nprocs, ierr)
     call mpi_comm_rank(mpi_comm_world, myrank, ierr)
 
-    print*,"starting apply_incr_noahmp_snow program on rank ", myrank, ' of ', nprocs, ' procs'
+    if (myrank==0) print*, "starting apply_incr_noahmp_snow program on ", nprocs, " procs"
 
     ! SET NAMELIST DEFAULTS
     frac_grid = .false.
@@ -65,7 +65,7 @@
 
     if (.not. file_exists) then
         write (6, *) 'ERROR: apply_incr_nml does not exist'
-        call mpi_abort(mpi_comm_world, 10)
+        call mpi_abort(mpi_comm_world, 10)  
     end if
 
     open (action='read', file='apply_incr_nml', iostat=ierr, newunit=lunit, iomsg=ioerrmsg)
@@ -74,7 +74,7 @@
     if (ierr /= 0) then
         print*, "Error code from namelist read", ierr
         write(6,*) trim(ioerrmsg)         
-        call mpi_abort(mpi_comm_world, 10)
+        call mpi_abort(mpi_comm_world, 10)  
     end if
 
     ! SET VARIABLE NAMES FOR SNOW OVER LAND AND GRID
@@ -104,8 +104,6 @@
             rst_path_full = trim(rst_path)      
             inc_path_full = trim(inc_path)      
         endif
-
-        print*, "Proc ", myrank, " ensemble member ", ens_mem, " tile ", tile_num
 
         ! GET MAPPING INDEX (see subroutine comments re: source of land/sea mask)
         call get_fv3_mapping(myrank, ens_mem, tile_num, rst_path_full, date_str, hour_str, res, len_land_vec, frac_grid, tile2vector)
@@ -198,7 +196,7 @@
 
     enddo
 
-    print*, "apply_incr_noahmp_snow finisheed on proc ", myrank
+    if (myrank==0) print*, "apply_incr_noahmp_snow finishing"
     call mpi_finalize(ierr)
 
  contains 
@@ -215,6 +213,7 @@
         integer, intent(in) :: err
         character(len=*), intent(in) :: string
         character(len=80) :: errmsg
+        integer           :: ierr
 
         if( err == nf90_noerr )return
         errmsg = nf90_strerror(err)
@@ -318,7 +317,6 @@
             enddo 
         enddo
 
-
     endif
  
     ! get number of land points
@@ -329,8 +327,6 @@
         enddo 
     enddo
     
-    write(6,*) 'Number of land points on proc ', myrank, 'ensmem ', ens_mem, ' tilenum ', tile_num, ' :',  len_land_vec
-
     allocate(tile2vector(len_land_vec,2)) 
 
     nn=0
