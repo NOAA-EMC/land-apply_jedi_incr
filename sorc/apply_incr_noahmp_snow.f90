@@ -65,7 +65,7 @@
 
     if (.not. file_exists) then
         write (6, *) 'ERROR: apply_incr_nml does not exist'
-        call mpi_abort(mpi_comm_world, 10)  !, ierr)
+        call mpi_abort(mpi_comm_world, 10)  
     end if
 
     open (action='read', file='apply_incr_nml', iostat=ierr, newunit=lunit, iomsg=ioerrmsg)
@@ -74,7 +74,7 @@
     if (ierr /= 0) then
         print*, "Error code from namelist read", ierr
         write(6,*) trim(ioerrmsg)         
-        call mpi_abort(mpi_comm_world, 10)  !, ierr)
+        call mpi_abort(mpi_comm_world, 10)  
     end if
 
     ! SET VARIABLE NAMES FOR SNOW OVER LAND AND GRID
@@ -104,8 +104,6 @@
             rst_path_full = trim(rst_path)      
             inc_path_full = trim(inc_path)      
         endif
-
-        ! print*, "Proc ", myrank, " ensemble member ", ens_mem, " tile ", tile_num
 
         ! GET MAPPING INDEX (see subroutine comments re: source of land/sea mask)
         call get_fv3_mapping(myrank, ens_mem, tile_num, rst_path_full, date_str, hour_str, res, len_land_vec, frac_grid, tile2vector)
@@ -170,8 +168,7 @@
         ! WRITE OUT ADJUSTED RESTART
         call   write_fv3_restart(trim(restart_file), noahmp_state, grid_state, res, ncid, len_land_vec, & 
                     frac_grid, tile2vector) 
-
-        ! CLOSE RESTART FILE 
+ 
         ierr = nf90_close(ncid)
         call netcdf_err( ierr, "closing restart file "//trim(restart_file) )
         
@@ -319,7 +316,6 @@
             enddo 
         enddo
 
-
     endif
  
     ! get number of land points
@@ -330,8 +326,6 @@
         enddo 
     enddo
     
-    ! write(6,*) 'Number of land points on proc ', myrank, 'ensmem ', ens_mem, ' tilenum ', tile_num, ' :',  len_land_vec
-
     allocate(tile2vector(len_land_vec,2)) 
 
     nn=0
