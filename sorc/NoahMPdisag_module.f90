@@ -37,7 +37,7 @@ contains
 
   logical, intent(in), optional      :: print_summary
 
-  double precision       :: layer_density, swe_increment, liq_ratio
+  double precision       :: layer_density, swe_increment, liq_ratio, delta
   integer                :: iloc, ilayer, iinter, active_layers, vector_loc, pathway
   double precision       :: soil_interfaces(7) = (/0.0,0.0,0.0,0.1,0.4,1.0,2.0/)
   double precision       :: partition_ratio, layer_depths(3), anal_snow_depth
@@ -115,9 +115,9 @@ contains
                 layer_density = (snow_ice_layer(iloc,ilayer)+snow_liq_layer(iloc,ilayer)) / &
                                   (-layer_depths(ilayer))
                 swe_increment = partition_ratio * increment(iloc) * layer_density / 1000.d0
-                !liq_ratio = snow_liq_layer(iloc,ilayer) / &
-                !              ( snow_ice_layer(iloc,ilayer) + snow_liq_layer(iloc,ilayer) )
-                liq_ratio = 0. ! add all new snow as ice.
+                liq_ratio = snow_liq_layer(iloc,ilayer) / &
+                              ( snow_ice_layer(iloc,ilayer) + snow_liq_layer(iloc,ilayer) )
+                !liq_ratio = 0. ! add all new snow as ice.
                 snow_ice_layer(iloc,ilayer) = snow_ice_layer(iloc,ilayer) + &
                                                   (1.0 - liq_ratio) * swe_increment
                 snow_liq_layer(iloc,ilayer) = snow_liq_layer(iloc,ilayer) + &
@@ -194,10 +194,11 @@ contains
                 layer_density = swe(iloc) / snow_depth(iloc) * 1000.d0
               end if
               if (temperature_soil(iloc)<=273.155) then  ! do not add is soil too warm (will melt)
+                  delta  = min(snow_depth(iloc) + increment(iloc), 50.) - snow_depth(iloc)
                   snow_depth(iloc) = min(snow_depth(iloc) + increment(iloc), 50.) ! limit amount of snow that can
                                                                                   ! be added so that no more than one layer
                                                                                   ! is created.
-                  swe(iloc) = swe(iloc) + increment(iloc) * layer_density / 1000.d0
+                  swe(iloc) = swe(iloc) + delta * layer_density / 1000.d0
                   count4 = count4+1
               else
                   count5 = count5+1
