@@ -26,7 +26,7 @@ module NoahMPdisag_module
 
 contains
 
-  subroutine UpdateAllLayers(vector_length, increment, noahmp, noincr_threshold, print_summary)
+  subroutine UpdateAllLayers(vector_length, increment, noahmp, noincr_threshold, print_out_summary)
 
  ! intent(in)
   integer, intent(in)                :: vector_length
@@ -35,7 +35,7 @@ contains
 ! intent(inout)
   type(noahmp_type), intent(inout)   :: noahmp
   double precision, intent(in)       :: noincr_threshold
-  logical, intent(in), optional      :: print_summary
+  logical, intent(in)                :: print_out_summary
 
   double precision       :: layer_density, swe_increment, liq_ratio, delta
   integer                :: iloc, ilayer, iinter, active_layers, vector_loc, pathway
@@ -43,13 +43,6 @@ contains
   double precision       :: partition_ratio, layer_depths(3), anal_snow_depth
   double precision       :: temp_soil_corr
   integer                :: count0, count1, count2, count3, count4, count5, count6, count7, count8
-  !double precision       :: snd_threshold
-  logical                :: print_out_summary
-  
-  print_out_summary = .false.
-  if (present(print_summary)) print_out_summary = print_summary
-  !snd_peak_threshold = 999999999.9
-  !if (present(snd_threshold)) snd_threshold = snd_threshold_in
 
   associate( &
                  swe => noahmp%swe                ,&
