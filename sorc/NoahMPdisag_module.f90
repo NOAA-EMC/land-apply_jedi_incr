@@ -26,28 +26,23 @@ module NoahMPdisag_module
 
 contains
 
-  subroutine UpdateAllLayers(vector_length, increment, noahmp, print_summary)
+  subroutine UpdateAllLayers(vector_length, increment, noahmp, noincr_threshold, print_out_summary)
 
  ! intent(in)
   integer, intent(in)                :: vector_length
   double precision, intent(in)       :: increment(vector_length) ! snow depth increment
-
+  
 ! intent(inout)
   type(noahmp_type), intent(inout)   :: noahmp
-
-  logical, intent(in), optional      :: print_summary
+  double precision, intent(in)       :: noincr_threshold
+  logical, intent(in)                :: print_out_summary
 
   double precision       :: layer_density, swe_increment, liq_ratio, delta
   integer                :: iloc, ilayer, iinter, active_layers, vector_loc, pathway
   double precision       :: soil_interfaces(7) = (/0.0,0.0,0.0,0.1,0.4,1.0,2.0/)
   double precision       :: partition_ratio, layer_depths(3), anal_snow_depth
   double precision       :: temp_soil_corr
-  integer                :: count0, count1, count2, count3, count4, count5, count6, count7
-
-  logical                :: print_out_summary
-  
-  print_out_summary = .false.
-  if (present(print_summary)) print_out_summary = print_summary
+  integer                :: count0, count1, count2, count3, count4, count5, count6, count7, count8
 
   associate( &
                  swe => noahmp%swe                ,&
@@ -68,6 +63,7 @@ contains
   count5=0
   count6=0
   count7=0
+  count8=0
 
   do iloc = 1, vector_length
     temp_soil_corr = min(273.15, temperature_soil(iloc))
@@ -103,31 +99,40 @@ contains
             layer_depths(3) = snow_soil_interface(iloc,3)-snow_soil_interface(iloc,2)
 
             if(increment(iloc) > 0.0) then  ! add snow in multi-layer mode
+              
+              if(snow_depth(iloc) > noincr_threshold) then 
 
-              pathway = 1 ! adding snow in multi-layer mode
-              count2 = count2+1
+                pathway = 8 ! skip increment for snow depth exceeding peak threshold
+                count8 = count8+1
 
-              vector_loc = 4 + active_layers  ! location in vector of top layer
+              else
 
-              layerloop1: do ilayer = vector_loc, 3
+                pathway = 1 ! adding snow in multi-layer mode
+                count2 = count2+1
 
-                partition_ratio = -layer_depths(ilayer)/snow_depth(iloc)*1000.d0
-                layer_density = (snow_ice_layer(iloc,ilayer)+snow_liq_layer(iloc,ilayer)) / &
-                                  (-layer_depths(ilayer))
-                swe_increment = partition_ratio * increment(iloc) * layer_density / 1000.d0
-                liq_ratio = snow_liq_layer(iloc,ilayer) / &
-                              ( snow_ice_layer(iloc,ilayer) + snow_liq_layer(iloc,ilayer) )
-                !liq_ratio = 0. ! add all new snow as ice.
-                snow_ice_layer(iloc,ilayer) = snow_ice_layer(iloc,ilayer) + &
-                                                  (1.0 - liq_ratio) * swe_increment
-                snow_liq_layer(iloc,ilayer) = snow_liq_layer(iloc,ilayer) + &
-                                                  liq_ratio * swe_increment
-                do iinter = ilayer, 3  ! remove snow from each snow layer
-                  snow_soil_interface(iloc,iinter) = snow_soil_interface(iloc,iinter) - &
-                                                       partition_ratio * increment(iloc)/1000.d0
-                end do
+                vector_loc = 4 + active_layers  ! location in vector of top layer
 
-              end do layerloop1
+                layerloop1: do ilayer = vector_loc, 3
+
+                  partition_ratio = -layer_depths(ilayer)/snow_depth(iloc)*1000.d0
+                  layer_density = (snow_ice_layer(iloc,ilayer)+snow_liq_layer(iloc,ilayer)) / &
+                                    (-layer_depths(ilayer))
+                  swe_increment = partition_ratio * increment(iloc) * layer_density / 1000.d0
+                  liq_ratio = snow_liq_layer(iloc,ilayer) / &
+                                ( snow_ice_layer(iloc,ilayer) + snow_liq_layer(iloc,ilayer) )
+                  !liq_ratio = 0. ! add all new snow as ice.
+                  snow_ice_layer(iloc,ilayer) = snow_ice_layer(iloc,ilayer) + &
+                                                    (1.0 - liq_ratio) * swe_increment
+                  snow_liq_layer(iloc,ilayer) = snow_liq_layer(iloc,ilayer) + &
+                                                    liq_ratio * swe_increment
+                  do iinter = ilayer, 3  ! remove snow from each snow layer
+                    snow_soil_interface(iloc,iinter) = snow_soil_interface(iloc,iinter) - &
+                                                         partition_ratio * increment(iloc)/1000.d0
+                  end do
+
+                end do layerloop1
+ 
+              endif  !da_threshold
 
             elseif(increment(iloc) < 0.0) then  ! remove snow in multi-layer mode
 
@@ -250,14 +255,14 @@ contains
 
     if(abs(snow_soil_interface(iloc,7) - snow_soil_interface(iloc,3) + 2.d0) > 0.0000001) then
       print*, "Depth of soil not 2m"
-      print*, pathway
+      print*, "pathway", pathway
       print*, snow_soil_interface(iloc,7), snow_soil_interface(iloc,3)
 !      stop
     end if
 
     if(active_snow_layers(iloc) < 0.0 .and. abs(snow_depth(iloc) + 1000.d0*snow_soil_interface(iloc,3)) > 0.0000001) then
       print*, "snow_depth and snow_soil_interface inconsistent"
-      print*, pathway
+      print*, "pathway", pathway
       print*, active_snow_layers(iloc), snow_depth(iloc), snow_soil_interface(iloc,3)
 !      stop
     end if
@@ -265,14 +270,14 @@ contains
     if( (abs(anal_snow_depth - snow_depth(iloc))   > 0.01) .and. (anal_snow_depth > 0.0001) .and. temperature_soil(iloc) <= 273.155 ) then
 ! this condition will fail if snow added was limitted to 50mm to avoid layering issues
       print*, "snow increment and updated model snow inconsistent"
-      print*, pathway
+      print*, "pathway", pathway
       print*, anal_snow_depth, snow_depth(iloc), temperature_soil(iloc)
 !      stop
     end if
 
     if(snow_depth(iloc) < 0.0 .or. snow_soil_interface(iloc,3) > 0.0 ) then
       print*, "snow depth or interface has wrong sign"
-      print*, pathway
+      print*, "pathway ", pathway
       print*, snow_depth(iloc), snow_soil_interface(iloc,3)
 !      stop
     end if
@@ -290,7 +295,7 @@ contains
     print *, "Increment not added in zero-layer mode, too warm", count5
     print *, "Increment added in zero-layer mode, added a layer", count6
     print *, "Increment removed snow in zero-layer mode", count7
-
+    print *, "Positive increment skipped (pathway 8) on snow depth exceeding peak threshold", count8
   endif
 
   end associate
