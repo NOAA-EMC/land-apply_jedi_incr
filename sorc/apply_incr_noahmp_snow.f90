@@ -46,10 +46,10 @@
  character(len=512) :: ioerrmsg
 
  double precision   :: noincr_threshold
- logical            :: print_summary
+ logical            :: print_summary, print_debug
 
  namelist /noahmp_snow/ date_str, hour_str, res, frac_grid, rst_path, inc_path, orog_path, otype, ntiles, ens_size, &
-                        noincr_threshold, print_summary
+                        noincr_threshold, print_summary, print_debug
 
     call mpi_init(ierr)
     call mpi_comm_size(mpi_comm_world, nprocs, ierr)
@@ -65,6 +65,7 @@
     ens_size = 1
     noincr_threshold = 999999999.9
     print_summary = .true.
+    print_debug = .false.
 
     ! READ NAMELIST 
     inquire (file='apply_incr_nml', exist=file_exists) 
@@ -153,7 +154,7 @@
 
         ! ADJUST THE SNOW STATES OVER LAND
 !TODO: return and check error code from this call (for now assume it is well handled inside function)
-        call UpdateAllLayers(len_land_vec, increment, noahmp_state, noincr_threshold, print_summary)
+        call UpdateAllLayers(len_land_vec, increment, noahmp_state, noincr_threshold, print_summary, print_debug)
 
         ! IF FRAC GRID, ADJUST SNOW STATES OVER GRID CELL
         if (frac_grid) then
