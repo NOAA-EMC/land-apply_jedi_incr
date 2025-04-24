@@ -64,7 +64,7 @@
     ntiles = 6
     ens_size = 1
     noincr_threshold = 999999999.9
-    print_summary = .false.
+    print_summary = .true.
 
     ! READ NAMELIST 
     inquire (file='apply_incr_nml', exist=file_exists) 
