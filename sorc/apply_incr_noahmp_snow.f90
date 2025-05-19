@@ -46,10 +46,10 @@
  character(len=512) :: ioerrmsg
 
  double precision   :: noincr_threshold
- logical            :: print_summary, print_debug
+ logical            :: print_summary, print_debug, truncate
 
  namelist /noahmp_snow/ date_str, hour_str, res, frac_grid, rst_path, inc_path, orog_path, otype, ntiles, ens_size, &
-                        noincr_threshold, print_summary, print_debug
+                        noincr_threshold, print_summary, print_debug, truncate
 
     call mpi_init(ierr)
     call mpi_comm_size(mpi_comm_world, nprocs, ierr)
@@ -66,6 +66,7 @@
     noincr_threshold = 999999999.9
     print_summary = .true.
     print_debug = .false.
+    truncate = .false.
 
     ! READ NAMELIST 
     inquire (file='apply_incr_nml', exist=file_exists) 
@@ -150,7 +151,7 @@
 
         ! READ SNOW DEPTH INCREMENT
         call   read_fv3_increment(tile_num, inc_path_full, date_str, hour_str, res, &
-                    len_land_vec, tile2vector, noahmp_state%name_snow_depth, increment)
+                    len_land_vec, tile2vector, noahmp_state%name_snow_depth, truncate, increment)
     
         if (frac_grid) then ! save background
             swe_back = noahmp_state%swe
@@ -515,7 +516,7 @@ end subroutine read_fv3_orog
 !  file format is same as restart file
 !--------------------------------------------------------------
  subroutine read_fv3_increment(tile_num, inc_path, date_str, hour_str, res, & 
-                len_land_vec,tile2vector, control_var, increment)
+                len_land_vec,tile2vector, control_var, truncate, increment)
 
  implicit none 
 
@@ -527,6 +528,7 @@ end subroutine read_fv3_orog
  character(len=2), intent(in) :: hour_str 
  integer, intent(in) :: tile2vector(len_land_vec,2)
  character(len=10), intent(in)  :: control_var
+ logical, intent(in) :: truncate
  double precision, intent(out) :: increment(len_land_vec)     ! snow depth increment
 
  character(len=512) :: incr_file
@@ -565,7 +567,12 @@ end subroutine read_fv3_orog
     ! read snow_depth (file name: snwdph, vert dim 1)
     call read_nc_var2D(ncid, trim(incr_file), len_land_vec, res, tile2vector, 0, & 
                         control_var, increment)
-
+    ! Truncate small increments if requested
+    if (truncate) then
+        do nn = 1, len_land_vec
+            if (abs(increment(nn)) < 1.0e-7) increment(nn) = 0.0d0
+        end do
+    end if
     ierr=nf90_close(ncid)
     call netcdf_err(ierr, 'closing file: '//trim(incr_file) )
 
