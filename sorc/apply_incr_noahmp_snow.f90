@@ -562,7 +562,7 @@ end subroutine read_fv3_orog
     ! read snow_depth (file name: snwdph, vert dim 1)
     call read_nc_var2D(ncid, trim(incr_file), len_land_vec, res, tile2vector, 0, & 
                         control_var, increment)
-    ! Truncate small increments if requested
+    ! Truncate increments if requested
     if (truncate) then
         do nn = 1, len_land_vec
             increment(nn) = dble(nint(increment(nn) * 1.0d7)) / 1.0d7
