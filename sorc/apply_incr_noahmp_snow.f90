@@ -1,4 +1,4 @@
- program apply_incr_noahmp_snow
+program apply_incr_noahmp_snow
 
  use netcdf
 
@@ -570,7 +570,7 @@ end subroutine read_fv3_orog
     ! Truncate small increments if requested
     if (truncate) then
         do nn = 1, len_land_vec
-            if (abs(increment(nn)) < 1.0e-7) increment(nn) = 0.0d0
+            increment(nn) = dble(nint(increment(nn) * 1.0d7)) / 1.0d7
         end do
     end if
     ierr=nf90_close(ncid)
