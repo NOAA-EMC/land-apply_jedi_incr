@@ -63,7 +63,12 @@ set( JEDIINCR_LIBRARIES jediincr )
 #-------------------------------------------------------------------------------
 set ( exe_files ./sorc/apply_incr_noahmp_snow.f90 )
 
-ecbuild_add_executable( TARGET   apply_incr.exe
+if(CMAKE_PROJECT_NAME)
+    set(target_name "${CMAKE_PROJECT_NAME}_apply_incr_noahmp_snow.x")
+else()
+    set(target_name "apply_incr_noahmp_snow.x")
+endif()
+ecbuild_add_executable( TARGET   ${target_name}
                         SOURCES  ${exe_files}
                         LIBS     jediincr
                         LINKER_LANGUAGE ${JEDIINCR_LINKER_LANGUAGE}
