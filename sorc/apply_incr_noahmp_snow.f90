@@ -49,7 +49,8 @@ program apply_incr_noahmp_snow
  logical            :: print_summary, print_debug, truncate
 
  integer              :: len_land_vec_oro, diff_count
- integer, allocatable :: slmsk_oro(:,:), slmsk_lfrac(:,:), tile2vector_oro(:,:) 
+ integer, allocatable :: slmsk_oro(:,:), slmsk_lfrac(:,:), tile2vector_oro(:,:), oro_min_lfrac(:) 
+ double precision     :: fice_threshold=0.01
 
  namelist /noahmp_snow/ date_str, hour_str, res, frac_grid, rst_path, inc_path, orog_path, otype, ntiles, ens_size, &
                         noincr_threshold, print_summary, print_debug, truncate
@@ -127,11 +128,13 @@ program apply_incr_noahmp_snow
         allocate(slmsk_oro(res, res))
         allocate(slmsk_lfrac(res, res))
         allocate(oro_min_lfrac(res*res))
+        frac_grid = .true.
+
         call get_fv3_mapping_oro(myrank, ens_mem, tile_num, rst_path_full, date_str, hour_str, res, frac_grid, orog_path, otype, &
-            len_land_vec_oro, slmsk_oro, slmsk_lfrac, tile2vector_oro)
+            len_land_vec_oro, slmsk_oro, slmsk_lfrac, tile2vector_oro, fice_threshold)
         
         print*, "proc ", myrank, "len_land_vec ", len_land_vec, "len_land_vec_oro ", len_land_vec_oro
-        oro_min_lfrac = reshape((slmsk_oro - slmsk_lfrac), res*res)
+        oro_min_lfrac = reshape((slmsk_oro - slmsk_lfrac), (/res*res/))
         diff_count = count(abs(oro_min_lfrac) > 0.000000001)
         print*, " # of points with oro-lfrac mask differerent = ", diff_count
 
@@ -421,7 +424,7 @@ end subroutine get_fv3_mapping
 !--------------------------------------------------------------
 
  subroutine get_fv3_mapping_oro(myrank, ens_mem, tile_num, rst_path, date_str, hour_str, res, & 
-                frac_grid, orog_path, otype, len_land_vec, slmsk, slmsk_lfrac, tile2vector)
+                frac_grid, orog_path, otype, len_land_vec, slmsk, slmsk_lfrac, tile2vector, fice_fhold)
 
  implicit none 
 
@@ -438,6 +441,7 @@ end subroutine get_fv3_mapping
  integer, intent(out)           :: slmsk(res,res) ! saved as double in the file, but i think this is OK
  integer, intent(out)           :: slmsk_lfrac(res,res) 
  integer, allocatable, intent(out) :: tile2vector(:,:)
+ double precision, intent(in)      :: fice_fhold
 
  character(len=512) :: restart_file, filename
  character(len=1) :: rankch
@@ -445,6 +449,8 @@ end subroutine get_fv3_mapping
  integer :: ierr, ncid
  integer :: id_dim, id_var, fres
  
+ double precision :: fice(res,res)
+
  integer :: vtype(res,res) ! saved as double in the file, but i think this is OK
  double precision :: land_frac(res,res)
  integer, parameter :: vtype_landice=15
@@ -514,6 +520,13 @@ end subroutine get_fv3_mapping
     ierr=nf90_get_var(ncid, id_var, vtype)
     call netcdf_err(ierr, 'reading vtype' )
 
+    if (frac_grid) then 
+        ierr=nf90_inq_varid(ncid, "fice", id_var)
+        call netcdf_err(ierr, 'reading fice id' )
+        ierr=nf90_get_var(ncid, id_var, fice)
+        call netcdf_err(ierr, 'reading fice' )
+    endif    
+
     ! close file
     ierr=nf90_close(ncid)
     call netcdf_err(ierr, 'closing file: '//trim(restart_file) )
@@ -532,6 +545,18 @@ end subroutine get_fv3_mapping
         enddo 
     enddo
  
+    if (frac_grid) then 
+
+        write (6, *) 'fractional grid: ammending mask to exclude sea ice from', trim(restart_file)
+        ! remove land grid cells if ice is present
+        do i = 1, res 
+            do j = 1, res  
+                if (fice(i,j) > fice_fhold ) slmsk_lfrac(i,j)=0
+            enddo 
+        enddo
+
+    endif
+
     ! get number of land points
     len_land_vec = 0
     do i = 1, res 
