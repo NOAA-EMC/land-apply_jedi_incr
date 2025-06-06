@@ -122,7 +122,7 @@ program apply_incr_noahmp_snow
         endif
 
         ! Calculate MAPPING INDEX based on land fraction
-        call get_fv3_mapping_oro(tile_num, rst_path_full, date_str, hour_str, res, frac_grid, &
+        call get_fv3_mapping_lfrac(tile_num, rst_path_full, date_str, hour_str, res, frac_grid, &
             orog_path, otype, fice_threshold, len_land_vec, tile2vector)
 
         ! SET-UP THE NOAH-MP STATE  AND INCREMENT        
@@ -406,7 +406,7 @@ end subroutine get_fv3_mapping
 ! Note: These masks do NOT have exclusion of islands. 
 !--------------------------------------------------------------
 
- subroutine get_fv3_mapping_oro(tile_num, rst_path, date_str, hour_str, res, & 
+ subroutine get_fv3_mapping_lfrac(tile_num, rst_path, date_str, hour_str, res, & 
                 frac_grid, orog_path, otype, fice_fhold, len_land_vec, tile2vector)
 
  implicit none 
@@ -548,7 +548,7 @@ end subroutine get_fv3_mapping
     enddo
 
 
-end subroutine get_fv3_mapping_oro
+end subroutine get_fv3_mapping_lfrac
 
 !--------------------------------------------------------------
 ! open fv3 restart, and read in required variables
