@@ -433,7 +433,7 @@ end subroutine get_fv3_mapping
  integer          :: slmsk_lfrac(res,res) 
  double precision :: fice(res,res)
 
- integer :: vtype(res,res) ! saved as double in the file, but i think this is OK
+ double precision   :: vtype(res,res)     ! saved as double in the file
  double precision   :: land_frac(res,res)
  integer, parameter :: vtype_landice=15
  integer :: i, j, nn
@@ -510,10 +510,24 @@ end subroutine get_fv3_mapping
     slmsk_lfrac = 0
     do i = 1, res 
         do j = 1, res  
-            if ((land_frac(i,j) >= 0.5 ) .and. (vtype(i,j) .ne. vtype_landice)) slmsk_lfrac(i,j) = 1
+            if ( land_frac(i,j) >= 0.5 ) slmsk_lfrac(i,j) = 1
         enddo 
     enddo
- 
+
+    ! remove land grid cells if glacier land type
+    do i = 1, res
+        do j = 1, res
+            if ( abs(vtype(i,j)- vtype_landice) < 0.5 ) slmsk_lfrac(i,j)=0     ! vtype is integer, but stored as double
+        enddo
+    enddo
+    
+    ! remove vtype 0
+    do i = 1, res
+        do j = 1, res
+            if ( vtype(i,j) ==  0)  slmsk_lfrac(i,j)=0   
+        enddo
+    enddo
+
     if (frac_grid) then 
 
         write (6, *) 'fractional grid: ammending mask to exclude sea ice for fice > ', fice_fhold
