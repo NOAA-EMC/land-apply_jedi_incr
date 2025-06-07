@@ -69,7 +69,7 @@ program apply_incr_noahmp_snow
     print_summary = .true.
     print_debug = .false.
     truncate = .false.
-    fice_threshold=1.0
+    fice_threshold = 0.00001
 
     ! READ NAMELIST 
     inquire (file='apply_incr_nml', exist=file_exists) 
