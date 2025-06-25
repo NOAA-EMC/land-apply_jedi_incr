@@ -436,7 +436,7 @@ end subroutine get_fv3_mapping
  double precision   :: vtype(res,res)     ! saved as double in the file
  double precision   :: land_frac(res,res)
  integer, parameter :: vtype_landice=15
- integer :: i, j, nn
+ integer :: i, j, nn, vz
 
     ! OPEN FILE
     write(rankch, '(i1.1)') (tile_num)
@@ -508,11 +508,18 @@ end subroutine get_fv3_mapping
     call netcdf_err(ierr, 'closing file: '//trim(restart_file) )
     
     slmsk_lfrac = 0
+    vz = 0
     do i = 1, res 
         do j = 1, res  
-            if ( land_frac(i,j) >= 0.5 ) slmsk_lfrac(i,j) = 1
+            if ( land_frac(i,j) >= 0.1 ) then 
+               slmsk_lfrac(i,j) = 1
+               if ( vtype(i,j) ==  0) then
+                   ! print*, "tile=",tile_num," i=",i," j=",j," veg=",vtype(i,j)," lfrac=",land_frac(i,j)
+               vz = vz + 1
+               endif
+            endif
         enddo 
-    enddo
+    enddo 
 
     ! remove land grid cells if glacier land type
     do i = 1, res
@@ -522,15 +529,15 @@ end subroutine get_fv3_mapping
     enddo
     
     ! remove vtype 0
-    do i = 1, res
-        do j = 1, res
-            if ( vtype(i,j) ==  0)  slmsk_lfrac(i,j)=0   
-        enddo
-    enddo
+    !    do i = 1, res
+    !        do j = 1, res
+    !            if ( vtype(i,j) ==  0)  slmsk_lfrac(i,j)=0   
+    !        enddo
+    !    enddo
 
     if (frac_grid) then 
 
-        write (6, *) 'fractional grid: ammending mask to exclude sea ice for fice > ', fice_fhold
+        !write (6, *) 'fractional grid: ammending mask to exclude sea ice for fice > ', fice_fhold
         ! remove land grid cells if ice is present
         do i = 1, res 
             do j = 1, res  
@@ -560,7 +567,7 @@ end subroutine get_fv3_mapping
              endif
         enddo 
     enddo
-
+    print*, "tile=",tile_num," # grids with vegtype 0 = ",vz
 
 end subroutine get_fv3_mapping_lfrac
 
