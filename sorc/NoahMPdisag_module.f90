@@ -43,7 +43,7 @@ contains
   double precision       :: soil_interfaces(7) = (/0.0,0.0,0.0,0.1,0.4,1.0,2.0/)
   double precision       :: partition_ratio, layer_depths(3), anal_snow_depth
   double precision       :: temp_soil_corr
-  integer                :: count0, count1, count2, count3, count4, count5, count6, count7, count8
+  integer                :: count0, count1, count2, count3, count4, count5, count6, count7, count8, count9
   logical                :: print_debug_out
 
   print_debug_out = .false.
@@ -69,6 +69,7 @@ contains
   count6=0
   count7=0
   count8=0
+  count9=0
 
   do iloc = 1, vector_length
     temp_soil_corr = min(273.15, temperature_soil(iloc))
@@ -275,6 +276,7 @@ contains
       print*, "snow depth or interface has wrong sign"
       print*, "pathway ", pathway
       print*, snow_depth(iloc), snow_soil_interface(iloc,3)
+      count9 = count9 + 1
 !      stop
     end if
 
@@ -302,6 +304,7 @@ contains
     print *, "Increment added in zero-layer mode, added a layer", count6
     print *, "Increment removed snow in zero-layer mode", count7
     print *, "Positive increment skipped (pathway 8) on snow depth exceeding peak threshold", count8
+    print *, "snow depth or interface has wrong sign", count9
   endif
 
   end associate
