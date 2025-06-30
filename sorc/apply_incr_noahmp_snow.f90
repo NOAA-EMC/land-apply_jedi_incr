@@ -302,7 +302,7 @@ program apply_incr_noahmp_snow
 
  include 'mpif.h'
 
- integer, intent(in) :: tile_num, res
+ integer, intent(in)          :: myrank, ens_mem, tile_num, res
  character(len=*), intent(in) :: rst_path
  character(len=8), intent(in) :: date_str 
  character(len=2), intent(in) :: hour_str 
