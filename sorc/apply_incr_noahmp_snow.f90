@@ -69,7 +69,7 @@ program apply_incr_noahmp_snow
     print_summary = .true.
     print_debug = .false.
     truncate = .false.
-    fice_threshold=0.0001
+    fice_threshold=0.0
     lfrac_threshold=0.0001
 
     ! READ NAMELIST 
@@ -122,13 +122,9 @@ program apply_incr_noahmp_snow
             inc_path_full = trim(inc_path)      
         endif
         
-        ! GET MAPPING INDEX from restarts (see subroutine comments re: source of land/sea mask)
-!        ! call get_fv3_mapping(myrank, ens_mem, tile_num, rst_path_full, date_str, hour_str, res, len_land_vec, &
-!        !                      frac_grid, tile2vector, fice_threshold)
-
         ! Calculate MAPPING INDEX based on land fraction
-        call get_fv3_mapping_lfrac(myrank, ens_mem, tile_num, rst_path_full, date_str, hour_str, res, &
-            frac_grid, orog_path, otype, len_land_vec, tile2vector, fice_threshold, lfrac_threshold)
+        call get_fv3_mapping_lfrac(tile_num, rst_path_full, date_str, hour_str, res, &
+             orog_path, otype, frac_grid, lfrac_threshold, fice_threshold, len_land_vec, tile2vector)
 
         ! SET-UP THE NOAH-MP STATE  AND INCREMENT        
         ! The allocations are inside the loop because different ensemble members could have different len_land_vec
@@ -282,44 +278,44 @@ program apply_incr_noahmp_snow
 
 
 !--------------------------------------------------------------
-! Get land sea mask from fv3 restart, and use to create 
+! Get land sea mask from fv3 restart, and use to create
 ! index for mapping from tiles (FV3 UFS restart) to vector
 !  of land locations (offline Noah-MP restart)
-! NOTE: slmsk in the restarts counts grid cells as land if 
-!       they have a non-zero land fraction. Excludes grid 
-!       cells that are surrounded by sea (islands). The slmsk 
-!       in the oro_grid files (used by JEDI for screening out 
-!       obs is different, and counts grid cells as land if they 
-!       are more than 50% land (same exclusion of islands). If 
-!       we want to change these definitations, may need to use 
+! NOTE: slmsk in the restarts counts grid cells as land if
+!       they have a non-zero land fraction. Excludes grid
+!       cells that are surrounded by sea (islands). The slmsk
+!       in the oro_grid files (used by JEDI for screening out
+!       obs is different, and counts grid cells as land if they
+!       are more than 50% land (same exclusion of islands). If
+!       we want to change these definitations, may need to use
 !       land_frac field from the oro_grid files.
 !--------------------------------------------------------------
 
- subroutine get_fv3_mapping(myrank, ens_mem, tile_num, rst_path, date_str, hour_str, res, & 
-                len_land_vec, frac_grid, tile2vector, fice_fhold)
+ subroutine get_fv3_mapping(myrank, ens_mem, tile_num, rst_path, date_str, hour_str, res, &
+                len_land_vec, frac_grid, tile2vector)
 
- implicit none 
+ implicit none
 
  include 'mpif.h'
 
- integer, intent(in)          :: myrank, ens_mem, tile_num, res
+ integer, intent(in) :: myrank, ens_mem, tile_num, res
  character(len=*), intent(in) :: rst_path
- character(len=8), intent(in) :: date_str 
- character(len=2), intent(in) :: hour_str 
+ character(len=8), intent(in) :: date_str
+ character(len=2), intent(in) :: hour_str
  logical, intent(in) :: frac_grid
  integer, allocatable, intent(out) :: tile2vector(:,:)
  integer :: len_land_vec
- double precision, intent(in) :: fice_fhold
 
  character(len=512) :: restart_file
  character(len=1) :: rankch
  logical :: file_exists
  integer :: ierr,  ncid
  integer :: id_dim, id_var, fres
- integer :: slmsk(res,res)      ! saved as double in the file, but i think this is OK
- integer :: vtype(res,res)      ! saved as double in the file, but i think this is OK
- integer, parameter :: vtype_landice=15, vtype_water=17
+ integer :: slmsk(res,res) ! saved as double in the file, but i think this is OK
+ integer :: vtype(res,res) ! saved as double in the file, but i think this is OK
+ integer, parameter :: vtype_landice=15
  double precision :: fice(res,res)
+ double precision, parameter :: fice_fhold = 0.00001
  integer :: i, j, nn
 
     ! OPEN FILE
@@ -331,18 +327,18 @@ program apply_incr_noahmp_snow
     if (.not. file_exists) then
             print *, 'restart_file does not exist, ', &
                     trim(restart_file) , ' exiting'
-            call mpi_abort(mpi_comm_world, 10) 
+            call mpi_abort(mpi_comm_world, 10)
     endif
 
     ierr=nf90_open(trim(restart_file),nf90_write,ncid)
     call netcdf_err(ierr, 'opening file: '//trim(restart_file) )
 
-    ! READ MASK 
+    ! READ MASK
     ierr=nf90_inq_varid(ncid, "slmsk", id_var)
     call netcdf_err(ierr, 'reading slmsk id' )
     ierr=nf90_get_var(ncid, id_var, slmsk)
     call netcdf_err(ierr, 'reading slmsk' )
- 
+
     ! REMOVE GLACIER GRID POINTS
     ierr=nf90_inq_varid(ncid, "vtype", id_var)
     call netcdf_err(ierr, 'reading vtype id' )
@@ -350,20 +346,13 @@ program apply_incr_noahmp_snow
     call netcdf_err(ierr, 'reading vtype' )
 
     ! remove land grid cells if glacier land type
-    do i = 1, res 
-        do j = 1, res  
-            if ( vtype(i,j) ==  vtype_landice)  slmsk(i,j)=0 ! vtype is integer, but stored as double
-        enddo 
-    enddo
- 
-    ! remove land grid cells if water
     do i = 1, res
         do j = 1, res
-            if ( vtype(i,j) == vtype_water ) slmsk(i,j)=0 ! vtype is integer, but stored as double
+            if ( vtype(i,j) ==  vtype_landice)  slmsk(i,j)=0 ! vtype is integer, but stored as double
         enddo
     enddo
 
-    if (frac_grid) then 
+    if (frac_grid) then
 
         write (6, *) 'fractional grid: ammending mask to exclude sea ice from', trim(restart_file)
 
@@ -373,82 +362,79 @@ program apply_incr_noahmp_snow
         call netcdf_err(ierr, 'reading fice' )
 
         ! remove land grid cells if ice is present
-        do i = 1, res 
-            do j = 1, res  
+        do i = 1, res
+            do j = 1, res
                 if (fice(i,j) > fice_fhold ) slmsk(i,j)=0
-            enddo 
+            enddo
         enddo
 
     endif
- 
+
     ! get number of land points
     len_land_vec = 0
-    do i = 1, res 
-        do j = 1, res 
-             if ( slmsk(i,j) > 0) len_land_vec = len_land_vec+ 1  
-        enddo 
+    do i = 1, res
+        do j = 1, res
+             if ( slmsk(i,j) == 1)  len_land_vec = len_land_vec+ 1
+        enddo
     enddo
-    
-    allocate(tile2vector(len_land_vec,2)) 
+
+    allocate(tile2vector(len_land_vec,2))
 
     nn=0
-    do i = 1, res 
-        do j = 1, res 
-             if ( slmsk(i,j) > 0) then 
+    do i = 1, res
+        do j = 1, res
+             if ( slmsk(i,j) == 1)   then
                 nn=nn+1
-                tile2vector(nn,1) = i 
-                tile2vector(nn,2) = j 
+                tile2vector(nn,1) = i
+                tile2vector(nn,2) = j
              endif
-        enddo 
+        enddo
     enddo
-
-    ierr=nf90_close(ncid)
-    call netcdf_err(ierr, 'closing file: '//trim(restart_file) )
 
 end subroutine get_fv3_mapping
 
+
 !--------------------------------------------------------------
 ! create index for mapping from tiles (FV3 UFS restart) to vector
-! of land locations (offline Noah-MP restart) based on land_frac 
-! field from the oro_grid files.
-! !> slmsk = 1 if: land frac >= lfrac_thold = 0.01%
-!                  && fice not > fice_threshold = 0.01%
-!                  && veg type not 15 (glaciers)
-!                  && veg type not 17 (water)
+! of land locations (offline Noah-MP restart) based on fraction of land 
+! (land_frac) field from the oro_grid files.
+! !> mask = 1 (land) if: land frac >= lfrac_thold = 0.01%
+!                        && fice (sea ice) not > fice_threshold = 0.0
+!                        && veg type not 15 (land ice)
 !
 ! Note: These masks do NOT have exclusion of islands. 
 !--------------------------------------------------------------
 
- subroutine get_fv3_mapping_lfrac(myrank, ens_mem, tile_num, rst_path, date_str, hour_str, res, & 
-                frac_grid, orog_path, otype, len_land_vec, tile2vector, fice_fhold, lfrac_thold)
+ subroutine get_fv3_mapping_lfrac(tile_num, rst_path, date_str, hour_str, res, & 
+            orog_path, otype, fice_grid, lfrac_thold, fice_fhold, len_land_vec, tile2vector)
 
  implicit none 
 
  include 'mpif.h'
 
- integer, intent(in)          :: myrank, ens_mem, tile_num, res
+ integer, intent(in)          :: tile_num, res
  character(len=*), intent(in) :: rst_path
  character(len=8), intent(in) :: date_str 
  character(len=2), intent(in) :: hour_str 
- logical, intent(in)          :: frac_grid
  character(len=*), intent(in)   :: orog_path
  character(len=20), intent(in)  :: otype
+ logical, intent(in)            :: fice_grid
+ double precision, intent(in)      :: lfrac_thold, fice_fhold
  integer, intent(out)              :: len_land_vec
  integer, allocatable, intent(out) :: tile2vector(:,:)
- double precision, intent(in)      :: fice_fhold, lfrac_thold
 
  character(len=512) :: restart_file, filename
- character(len=1) :: rankch
+ character(len=1)   :: rankch
  logical :: file_exists
  integer :: ierr, ncid
  integer :: id_dim, id_var, fres
 
-  integer           :: slmsk_lfrac(res,res)
+ integer            :: slmsk_lfrac(res,res)
  double precision   :: fice(res,res)
  double precision   :: vtype(res,res)     ! saved as double in the file
  double precision   :: land_frac(res,res)
- integer, parameter :: vtype_landice=15, vtype_water=17
- integer :: i, j, nn, nc
+ integer, parameter :: vtype_landice=15   !, vtype_water=17
+ integer :: i, j, nn
 
     ! OPEN FILE
     write(rankch, '(i1.1)') (tile_num)
@@ -508,12 +494,12 @@ end subroutine get_fv3_mapping
     ierr=nf90_get_var(ncid, id_var, vtype)
     call netcdf_err(ierr, 'reading vtype' )
 
-    if (frac_grid) then 
-        ierr=nf90_inq_varid(ncid, "fice", id_var)
-        call netcdf_err(ierr, 'reading fice id' )
-        ierr=nf90_get_var(ncid, id_var, fice)
-        call netcdf_err(ierr, 'reading fice' )
-    endif    
+    if (fice_grid) then    
+      ierr=nf90_inq_varid(ncid, "fice", id_var)
+      call netcdf_err(ierr, 'reading fice id' )
+      ierr=nf90_get_var(ncid, id_var, fice)
+      call netcdf_err(ierr, 'reading fice' )   
+    endif
 
     ! close file
     ierr=nf90_close(ncid)
@@ -526,46 +512,22 @@ end subroutine get_fv3_mapping
         enddo
     enddo
 
-    nc=0
     ! remove land grid cells if ice is present
-    if (frac_grid) then
-
-        !write (6, *) 'fractional grid: ammending mask to exclude sea ice from', trim(restart_file)
-
+    if (fice_grid) then
+        write (6, *) 'ammending mask to exclude sea ice from', trim(restart_file)
         do i = 1, res
             do j = 1, res
-                if (fice(i,j) > fice_fhold ) then
-                        slmsk_lfrac(i,j) = 0
-                        nc=nc+1
-                endif
+                if (fice(i,j) > fice_fhold ) slmsk_lfrac(i,j) = 0
             enddo
         enddo
-        ! print*, "proc ", myrank, " num frac ice >0 ", nc
     endif
 
-    nc=0
     ! remove land grid cells if glacier land type
     do i = 1, res
         do j = 1, res
-            if ( vtype(i,j) ==  vtype_landice) then
-                    slmsk_lfrac(i,j) = 0 ! vtype is integer, but stored as double
-                    nc=nc+1
-            endif
+            if ( vtype(i,j) ==  vtype_landice) slmsk_lfrac(i,j) = 0 ! vtype is integer, but stored as double
         enddo
     enddo
-    ! print*, "proc ", myrank, " num land ice ", nc
-    
-    nc=0
-    ! remove land grid cells if water
-    do i = 1, res
-        do j = 1, res
-            if ( vtype(i,j) == vtype_water ) then
-                    slmsk_lfrac(i,j) = 0 ! vtype is integer, but stored as double
-                    nc=nc+1
-            endif
-        enddo
-    enddo
-    ! print*, "proc ", myrank, " num water ", nc
 
     ! get number of land points
     len_land_vec = 0
