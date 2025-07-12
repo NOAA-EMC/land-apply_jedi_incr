@@ -47,6 +47,8 @@ program apply_incr_noahmp_snow
 
  double precision   :: noincr_threshold
  logical            :: print_summary, print_debug, truncate
+ 
+ double precision   :: snd_threshold=0.00000001
 
  double precision   :: fice_threshold, lfrac_threshold
 
@@ -181,14 +183,14 @@ program apply_incr_noahmp_snow
                                     grid_state%land_frac(n)* ( noahmp_state%snow_depth(n) - snow_depth_back(n)) 
             
                ! check for negative valus
-                if((grid_state%snow_depth(n) <=  0.0001) .or. (grid_state%swe(n) <=  0.0001)) then
+                if((grid_state%snow_depth(n) <=  snd_threshold) .or. (grid_state%swe(n) <=  snd_threshold)) then
                   grid_state%snow_depth(n) = 0.0
                   grid_state%swe(n) = 0.0
 
                   noahmp_state%swe                (n)   = 0.0
                   noahmp_state%snow_depth         (n)   = 0.0
                   noahmp_state%active_snow_layers (n)   = 0.0
-                  noahmp_state%swe_previous       (n)   = 0.0
+                 ! noahmp_state%swe_previous       (n)   = 0.0
                   noahmp_state%snow_soil_interface(n,:) = (/0.0,0.0,0.0,-0.1,-0.4,-1.0,-2.0/)
                   noahmp_state%temperature_snow   (n,:) = 0.0
                   noahmp_state%snow_ice_layer     (n,:) = 0.0
@@ -199,11 +201,11 @@ program apply_incr_noahmp_snow
         
         ! check for negative valus again
         do n=1,len_land_vec
-          if((noahmp_state%snow_depth(n) <=  0.0001) .or. (noahmp_state%swe(n) <=  0.0001)) then 
+          if((noahmp_state%snow_depth(n) <=  snd_threshold) .or. (noahmp_state%swe(n) <=  snd_threshold)) then 
             noahmp_state%swe                (n)   = 0.0
             noahmp_state%snow_depth         (n)   = 0.0
             noahmp_state%active_snow_layers (n)   = 0.0
-            noahmp_state%swe_previous       (n)   = 0.0
+            !noahmp_state%swe_previous       (n)   = 0.0
             noahmp_state%snow_soil_interface(n,:) = (/0.0,0.0,0.0,-0.1,-0.4,-1.0,-2.0/)
             noahmp_state%temperature_snow   (n,:) = 0.0
             noahmp_state%snow_ice_layer     (n,:) = 0.0
