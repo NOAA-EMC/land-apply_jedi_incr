@@ -192,7 +192,7 @@ program apply_incr_noahmp_snow
                   noahmp_state%active_snow_layers (n)   = 0.0
                  ! noahmp_state%swe_previous       (n)   = 0.0
                   noahmp_state%snow_soil_interface(n,:) = (/0.0,0.0,0.0,-0.1,-0.4,-1.0,-2.0/)
-                  noahmp_state%temperature_snow   (n,:) = 273.16   !TODO:confirm this
+                  noahmp_state%temperature_snow   (n,:) = 0.0
                   noahmp_state%snow_ice_layer     (n,:) = 0.0
                   noahmp_state%snow_liq_layer     (n,:) = 0.0
                 endif
@@ -207,7 +207,7 @@ program apply_incr_noahmp_snow
             noahmp_state%active_snow_layers (n)   = 0.0
             !noahmp_state%swe_previous       (n)   = 0.0
             noahmp_state%snow_soil_interface(n,:) = (/0.0,0.0,0.0,-0.1,-0.4,-1.0,-2.0/)
-            noahmp_state%temperature_snow   (n,:) = 273.16
+            noahmp_state%temperature_snow   (n,:) = 0.0
             noahmp_state%snow_ice_layer     (n,:) = 0.0
             noahmp_state%snow_liq_layer     (n,:) = 0.0
             if (frac_grid) then          
