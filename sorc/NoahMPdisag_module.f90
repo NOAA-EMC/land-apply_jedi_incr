@@ -90,7 +90,7 @@ contains
           active_snow_layers (iloc)   = 0.0
           swe_previous       (iloc)   = 0.0
           snow_soil_interface(iloc,:) = (/0.0,0.0,0.0,-0.1,-0.4,-1.0,-2.0/)
-          temperature_snow   (iloc,:) = 0.0
+          temperature_snow   (iloc,:) = 273.16  !TODO:confirm this
           snow_ice_layer     (iloc,:) = 0.0
           snow_liq_layer     (iloc,:) = 0.0
 
