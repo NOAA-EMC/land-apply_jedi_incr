@@ -166,7 +166,7 @@ program apply_incr_noahmp_snow
         endif 
 
         ! ADJUST THE SNOW STATES OVER LAND
-!TODO: return and check error code from this call (for now assume it is well handled inside function)
+        !TODO: return and check error code from this call (for now assume it is well handled inside function)
         call UpdateAllLayers(len_land_vec, increment, noahmp_state, noincr_threshold, print_summary, print_debug)
 
         ! IF FRAC GRID, ADJUST SNOW STATES OVER GRID CELL
@@ -190,7 +190,7 @@ program apply_incr_noahmp_snow
                   noahmp_state%swe                (n)   = 0.0
                   noahmp_state%snow_depth         (n)   = 0.0
                   noahmp_state%active_snow_layers (n)   = 0.0
-                 ! noahmp_state%swe_previous       (n)   = 0.0
+                  noahmp_state%swe_previous       (n)   = 0.0
                   noahmp_state%snow_soil_interface(n,:) = (/0.0,0.0,0.0,-0.1,-0.4,-1.0,-2.0/)
                   noahmp_state%temperature_snow   (n,:) = 0.0
                   noahmp_state%snow_ice_layer     (n,:) = 0.0
@@ -205,7 +205,7 @@ program apply_incr_noahmp_snow
             noahmp_state%swe                (n)   = 0.0
             noahmp_state%snow_depth         (n)   = 0.0
             noahmp_state%active_snow_layers (n)   = 0.0
-            !noahmp_state%swe_previous       (n)   = 0.0
+            noahmp_state%swe_previous       (n)   = 0.0
             noahmp_state%snow_soil_interface(n,:) = (/0.0,0.0,0.0,-0.1,-0.4,-1.0,-2.0/)
             noahmp_state%temperature_snow   (n,:) = 0.0
             noahmp_state%snow_ice_layer     (n,:) = 0.0
