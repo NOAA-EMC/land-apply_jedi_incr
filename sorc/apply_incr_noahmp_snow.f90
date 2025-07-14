@@ -59,7 +59,7 @@ program apply_incr_noahmp_snow
     call mpi_comm_size(mpi_comm_world, nprocs, ierr)
     call mpi_comm_rank(mpi_comm_world, myrank, ierr)
 
-    if (myrank==0) print*, "starting apply_incr_noahmp_snow program on ", nprocs, " procs"
+    if (myrank==0) print*, "proc starting apply_incr_noahmp_snow program on ", nprocs, " procs"
 
     ! SET NAMELIST DEFAULTS
     frac_grid = .false.
@@ -83,17 +83,12 @@ program apply_incr_noahmp_snow
     end if
 
     open (action='read', file='apply_incr_nml', iostat=ierr, newunit=lunit, iomsg=ioerrmsg)
-    read (nml=noahmp_snow, unit=lunit, ERR=888, END=999, iostat=ierr)
+    read (nml=noahmp_snow, iostat=ierr, unit=lunit)
     close (lunit)
-888 if (ierr /= 0) then
+    if (ierr /= 0) then
         print*, "Error code from namelist read", ierr
         write(6,*) trim(ioerrmsg)         
         call mpi_abort(mpi_comm_world, 10)  
-    end if
-999 if (ierr /= 0) then
-        print*, "warning! one or more default namelist values will be used." 
-        print*, "Error code from namelist read", ierr    
-        write(6,*) trim(ioerrmsg) 
     end if
 
     ! SET VARIABLE NAMES FOR SNOW OVER LAND AND GRID
