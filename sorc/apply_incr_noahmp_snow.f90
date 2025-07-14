@@ -59,7 +59,7 @@ program apply_incr_noahmp_snow
     call mpi_comm_size(mpi_comm_world, nprocs, ierr)
     call mpi_comm_rank(mpi_comm_world, myrank, ierr)
 
-    if (myrank==0) print*, "proc starting apply_incr_noahmp_snow program on ", nprocs, " procs"
+    if (myrank==0) print*, "starting apply_incr_noahmp_snow program on ", nprocs, " procs"
 
     ! SET NAMELIST DEFAULTS
     frac_grid = .false.
