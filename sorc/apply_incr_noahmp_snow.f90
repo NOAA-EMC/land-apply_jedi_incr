@@ -83,7 +83,7 @@ program apply_incr_noahmp_snow
     end if
 
     open (action='read', file='apply_incr_nml', iostat=ierr, newunit=lunit, iomsg=ioerrmsg)
-    read (nml=noahmp_snow, iostat=ierr, unit=lunit)
+    read (nml=noahmp_snow, unit=lunit, ERR=888, END=999, iostat=ierr)
     close (lunit)
 888 if (ierr /= 0) then
         print*, "Error code from namelist read", ierr
