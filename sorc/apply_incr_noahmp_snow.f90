@@ -199,7 +199,7 @@ program apply_incr_noahmp_snow
             enddo
         endif
         
-        ! check for negative valus again
+        ! check for negative values again
         do n=1,len_land_vec
           if((noahmp_state%snow_depth(n) <=  snd_threshold) .or. (noahmp_state%swe(n) <=  snd_threshold)) then 
             noahmp_state%swe                (n)   = 0.0
