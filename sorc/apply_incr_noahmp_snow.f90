@@ -182,7 +182,7 @@ program apply_incr_noahmp_snow
                     grid_state%snow_depth(n) = grid_state%snow_depth(n) + & 
                                     grid_state%land_frac(n)* ( noahmp_state%snow_depth(n) - snow_depth_back(n)) 
             
-               ! check for negative valus
+               ! check for negative values
                 if((grid_state%snow_depth(n) <=  snd_threshold) .or. (grid_state%swe(n) <=  snd_threshold)) then
                   grid_state%snow_depth(n) = 0.0
                   grid_state%swe(n) = 0.0
