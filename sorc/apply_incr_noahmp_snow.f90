@@ -48,7 +48,7 @@ program apply_incr_noahmp_snow
  double precision   :: noincr_threshold
  logical            :: print_summary, print_debug, truncate
  
- double precision   :: snd_threshold=0.00000001
+ double precision   :: snd_threshold=0.0001
 
  double precision   :: fice_threshold, lfrac_threshold
 
@@ -172,31 +172,26 @@ program apply_incr_noahmp_snow
                     grid_state)
 
             do n=1,len_land_vec 
-                    grid_state%swe(n) = grid_state%swe(n) + & 
+                grid_state%swe(n) = grid_state%swe(n) + & 
                                     grid_state%land_frac(n)* ( noahmp_state%swe(n) - swe_back(n)) 
-                    grid_state%snow_depth(n) = grid_state%snow_depth(n) + & 
+                grid_state%snow_depth(n) = grid_state%snow_depth(n) + & 
                                     grid_state%land_frac(n)* ( noahmp_state%snow_depth(n) - snow_depth_back(n)) 
+                ! check for negative values
+                if((grid_state%snow_depth(n) <=  snd_threshold) .or. (grid_state%swe(n) <=  snd_threshold)) then
+                    noahmp_state%swe                (n)   = 0.0
+                    noahmp_state%snow_depth         (n)   = 0.0
+                    noahmp_state%active_snow_layers (n)   = 0.0
+                    noahmp_state%swe_previous       (n)   = 0.0
+                    noahmp_state%snow_soil_interface(n,:) = (/0.0,0.0,0.0,-0.1,-0.4,-1.0,-2.0/)
+                    noahmp_state%temperature_snow   (n,:) = 0.0
+                    noahmp_state%snow_ice_layer     (n,:) = 0.0
+                    noahmp_state%snow_liq_layer     (n,:) = 0.0
+                    grid_state%snow_depth           (n)   = 0.0
+                    grid_state%swe                  (n)   = 0.0
+                endif
             enddo
         endif
         
-        ! check for negative values
-        do n=1,len_land_vec
-          if((noahmp_state%snow_depth(n) <=  snd_threshold) .or. (noahmp_state%swe(n) <=  snd_threshold)) then 
-            noahmp_state%swe                (n)   = 0.0
-            noahmp_state%snow_depth         (n)   = 0.0
-            noahmp_state%active_snow_layers (n)   = 0.0
-            noahmp_state%swe_previous       (n)   = 0.0
-            noahmp_state%snow_soil_interface(n,:) = (/0.0,0.0,0.0,-0.1,-0.4,-1.0,-2.0/)
-            noahmp_state%temperature_snow   (n,:) = 0.0
-            noahmp_state%snow_ice_layer     (n,:) = 0.0
-            noahmp_state%snow_liq_layer     (n,:) = 0.0
-            if (frac_grid) then          
-              grid_state%snow_depth(n) = 0.0
-              grid_state%swe(n) = 0.0          
-            endif
-          endif
-        enddo
-
         ! WRITE OUT ADJUSTED RESTART
         call   write_fv3_restart(trim(restart_file), noahmp_state, grid_state, res, ncid, len_land_vec, & 
                     frac_grid, tile2vector) 
