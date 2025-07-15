@@ -176,25 +176,10 @@ program apply_incr_noahmp_snow
                                     grid_state%land_frac(n)* ( noahmp_state%swe(n) - swe_back(n)) 
                     grid_state%snow_depth(n) = grid_state%snow_depth(n) + & 
                                     grid_state%land_frac(n)* ( noahmp_state%snow_depth(n) - snow_depth_back(n)) 
-            
-               ! check for negative values
-                if((grid_state%snow_depth(n) <=  snd_threshold) .or. (grid_state%swe(n) <=  snd_threshold)) then
-                  grid_state%snow_depth(n) = 0.0
-                  grid_state%swe(n) = 0.0
-
-                  noahmp_state%swe                (n)   = 0.0
-                  noahmp_state%snow_depth         (n)   = 0.0
-                  noahmp_state%active_snow_layers (n)   = 0.0
-                  noahmp_state%swe_previous       (n)   = 0.0
-                  noahmp_state%snow_soil_interface(n,:) = (/0.0,0.0,0.0,-0.1,-0.4,-1.0,-2.0/)
-                  noahmp_state%temperature_snow   (n,:) = 0.0
-                  noahmp_state%snow_ice_layer     (n,:) = 0.0
-                  noahmp_state%snow_liq_layer     (n,:) = 0.0
-                endif
             enddo
         endif
         
-        ! check for negative values again
+        ! check for negative values
         do n=1,len_land_vec
           if((noahmp_state%snow_depth(n) <=  snd_threshold) .or. (noahmp_state%swe(n) <=  snd_threshold)) then 
             noahmp_state%swe                (n)   = 0.0
@@ -395,7 +380,7 @@ end subroutine get_fv3_mapping
 ! create index for mapping from tiles (FV3 UFS restart) to vector
 ! of land locations (offline Noah-MP restart) based on fraction of land 
 ! (land_frac) field from the oro_grid files.
-! !> mask = 1 (land) if: land frac >= lfrac_thold = 0.01%
+! !> mask = 1 (land) if: land frac >= lfrac_threshold = 0.01%
 !                        && fice (sea ice) not > fice_threshold = 0.0
 !                        && veg type not 15 (land ice)
 !
