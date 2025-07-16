@@ -48,7 +48,7 @@ program apply_incr_noahmp_snow
  double precision   :: noincr_threshold
  logical            :: print_summary, print_debug, truncate
  
- double precision   :: snd_threshold=0.0001
+ double precision   :: snd_threshold=0.00001, swe_threshold=0.0001
 
  double precision   :: fice_threshold, lfrac_threshold
 
@@ -177,7 +177,7 @@ program apply_incr_noahmp_snow
                 grid_state%snow_depth(n) = grid_state%snow_depth(n) + & 
                                     grid_state%land_frac(n)* ( noahmp_state%snow_depth(n) - snow_depth_back(n)) 
                 ! check for negative values
-                if((grid_state%snow_depth(n) <=  snd_threshold) .or. (grid_state%swe(n) <=  snd_threshold)) then
+                if((grid_state%snow_depth(n) <=  snd_threshold) .or. (grid_state%swe(n) <=  swe_threshold)) then
                     noahmp_state%swe                (n)   = 0.0
                     noahmp_state%snow_depth         (n)   = 0.0
                     noahmp_state%active_snow_layers (n)   = 0.0
