@@ -384,7 +384,7 @@ program apply_incr_noahmp_snow
     ! remove land grid cells if glacier land type
     do i = 1, res
         do j = 1, res
-            if ( vtype(i,j) ==  vtype_landice) slmsk_lfrac(i,j) = 0 ! vtype is integer, but stored as double
+            if ( nint(vtype(i,j)) ==  vtype_landice) slmsk_lfrac(i,j) = 0 ! vtype is integer, but stored as double
         enddo
     enddo
 
