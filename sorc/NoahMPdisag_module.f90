@@ -276,18 +276,7 @@ contains
       print*, snow_depth(iloc), snow_soil_interface(iloc,3)
       call mpi_abort(mpi_comm_world, 10)
     end if
-
-    if (print_debug_out) then
-      if( (abs(anal_snow_depth - snow_depth(iloc))   > 0.01) .and. (anal_snow_depth > 0.0001) &
-              .and. temperature_soil(iloc) <= 273.155 ) then
-      ! this condition will fail if snow added was limitted to 50mm to avoid layering issues
-        print*, "snow increment and updated model snow inconsistent"
-        print*, "pathway", pathway
-        print*, anal_snow_depth, snow_depth(iloc), temperature_soil(iloc)
-      !      stop
-      end if
-    end if
-
+    
   end do
 
   if (print_out_summary) then 
