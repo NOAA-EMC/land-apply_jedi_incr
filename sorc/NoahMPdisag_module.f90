@@ -262,13 +262,7 @@ contains
     end if ! non-zero increment
 
     ! do some gross error checks 
-    if(abs(snow_soil_interface(iloc,7) - snow_soil_interface(iloc,3) + 2.d0) > 0.0000001) then
-      print*, "Depth of soil not 2m"
-      print*, "pathway", pathway
-      print*, snow_soil_interface(iloc,7), snow_soil_interface(iloc,3)
-!      stop
-    end if
-
+    
     if(active_snow_layers(iloc) < 0.0 .and. abs(snow_depth(iloc) + 1000.d0*snow_soil_interface(iloc,3)) > 0.0000001) then
       print*, "snow_depth and snow_soil_interface inconsistent"
       print*, "pathway", pathway
