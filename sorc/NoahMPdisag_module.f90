@@ -260,20 +260,6 @@ contains
     else
         count0 = count0+1
     end if ! non-zero increment
-
-    ! do some gross error checks 
-    
-    if(active_snow_layers(iloc) < 0.0 .and. abs(snow_depth(iloc) + 1000.d0*snow_soil_interface(iloc,3)) > 0.0000001) then
-      print*, "snow_depth and snow_soil_interface inconsistent"
-      print*, "pathway", pathway
-      print*, active_snow_layers(iloc), snow_depth(iloc), snow_soil_interface(iloc,3)
-    end if
-
-    if(snow_depth(iloc) < 0.0 .or. snow_soil_interface(iloc,3) > 0.0 ) then
-      print*, "snow depth or interface has wrong sign"
-      print*, "pathway ", pathway
-      print*, snow_depth(iloc), snow_soil_interface(iloc,3)
-    end if
     
   end do
 
