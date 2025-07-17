@@ -48,7 +48,7 @@ program apply_incr_noahmp_snow
  double precision   :: noincr_threshold
  logical            :: print_summary, print_debug, truncate
  
- double precision   :: snd_threshold=0.00001, swe_threshold=0.0001
+ double precision   :: snd_threshold=0.0001, swe_threshold=0.00001
 
  double precision   :: fice_threshold, lfrac_threshold
 
@@ -288,12 +288,13 @@ program apply_incr_noahmp_snow
  integer :: ierr, ncid
  integer :: id_dim, id_var, fres
 
- integer            :: slmsk_lfrac(res,res)
+ integer            :: slmsk_rest(res,res), slmsk_lfrac(res,res)
  double precision   :: fice(res,res)
  double precision   :: vtype(res,res)     ! saved as double in the file
  double precision   :: land_frac(res,res)
  integer, parameter :: vtype_landice=15   !, vtype_water=17
- integer :: i, j, nn
+ integer            :: i, j, nn, len_land_vec_rest, diff_count
+ integer, allocatable  :: tile2vector_rest(:,:), tile2vector_diff(:,:)
 
     ! OPEN FILE
     write(rankch, '(i1.1)') (tile_num)
@@ -347,6 +348,12 @@ program apply_incr_noahmp_snow
     ierr=nf90_open(trim(restart_file),nf90_write,ncid)
     call netcdf_err(ierr, 'opening file: '//trim(restart_file) )
  
+    ! READ MASK from restart
+    ierr=nf90_inq_varid(ncid, "slmsk", id_var)
+    call netcdf_err(ierr, 'reading slmsk id' )
+    ierr=nf90_get_var(ncid, id_var, slmsk_rest)
+    call netcdf_err(ierr, 'reading slmsk from restart' )
+
     ! REMOVE GLACIER GRID POINTS
     ierr=nf90_inq_varid(ncid, "vtype", id_var)
     call netcdf_err(ierr, 'reading vtype id' )
@@ -376,7 +383,10 @@ program apply_incr_noahmp_snow
         write (6, *) 'ammending mask to exclude sea ice from', trim(restart_file)
         do i = 1, res
             do j = 1, res
-                if (fice(i,j) > fice_fhold ) slmsk_lfrac(i,j) = 0
+                if (fice(i,j) > fice_fhold ) then 
+                        slmsk_lfrac(i,j) = 0
+                        slmsk_rest(i,j) = 0
+                endif
             enddo
         enddo
     endif
@@ -384,7 +394,10 @@ program apply_incr_noahmp_snow
     ! remove land grid cells if glacier land type
     do i = 1, res
         do j = 1, res
-            if ( nint(vtype(i,j)) ==  vtype_landice) slmsk_lfrac(i,j) = 0 ! vtype is integer, but stored as double
+            if ( nint(vtype(i,j)) ==  vtype_landice) then  ! vtype is integer, but stored as double
+                    slmsk_lfrac(i,j) = 0 
+                    slmsk_rest(i,j) = 0
+            endif
         enddo
     enddo
 
@@ -392,11 +405,26 @@ program apply_incr_noahmp_snow
     len_land_vec = 0
     do i = 1, res 
         do j = 1, res 
-             if ( slmsk_lfrac(i,j) == 1)  len_land_vec = len_land_vec+ 1  
+             if ( slmsk_lfrac(i,j) == 1)  len_land_vec = len_land_vec + 1  
         enddo 
     enddo
     
+    len_land_vec_rest = 0
+    do i = 1, res
+        do j = 1, res
+             if ( slmsk_rest(i,j) > 0)  len_land_vec_rest = len_land_vec_rest + 1
+        enddo
+    enddo
+
+    if (len_land_vec .ne. len_land_vec_rest) then 
+        print*, "number of land points from "//trim(filename)//" not consitent with those from "//trim(restart_file)
+        print*, "orog land points = ",len_land_vec," restart land points = ", len_land_vec_rest 
+        call mpi_abort(mpi_comm_world, 10)
+    endif
+
     allocate(tile2vector(len_land_vec,2)) 
+    allocate(tile2vector_rest(len_land_vec,2))
+    allocate(tile2vector_diff(len_land_vec,2))
 
     nn=0
     do i = 1, res 
@@ -408,6 +436,27 @@ program apply_incr_noahmp_snow
              endif
         enddo 
     enddo
+
+    nn=0
+    do i = 1, res
+        do j = 1, res
+             if ( slmsk_rest(i,j) > 0) then  ! some land points are marked 2 (snow) during ufs calls
+                nn=nn+1
+                tile2vector_rest(nn,1) = i
+                tile2vector_rest(nn,2) = j
+             endif
+        enddo
+    enddo
+
+    !check mask consistency from restart and orog
+    tile2vector_diff = tile2vector_rest - tile2vector
+    diff_count = count(abs(tile2vector_diff) > 0)
+    if (diff_count > 0) then 
+        print*, diff_count, " differences between land mask from "//trim(filename)//" and from "//trim(restart_file)
+        call mpi_abort(mpi_comm_world, 10)
+    endif
+
+    deallocate(tile2vector_rest, tile2vector_diff)
 
 end subroutine get_fv3_mapping_lfrac
 

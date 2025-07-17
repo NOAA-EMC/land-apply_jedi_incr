@@ -267,14 +267,12 @@ contains
       print*, "snow_depth and snow_soil_interface inconsistent"
       print*, "pathway", pathway
       print*, active_snow_layers(iloc), snow_depth(iloc), snow_soil_interface(iloc,3)
-      call mpi_abort(mpi_comm_world, 10)
     end if
 
     if(snow_depth(iloc) < 0.0 .or. snow_soil_interface(iloc,3) > 0.0 ) then
       print*, "snow depth or interface has wrong sign"
       print*, "pathway ", pathway
       print*, snow_depth(iloc), snow_soil_interface(iloc,3)
-      call mpi_abort(mpi_comm_world, 10)
     end if
     
   end do
