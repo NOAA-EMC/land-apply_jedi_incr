@@ -47,9 +47,13 @@ program apply_incr_noahmp_snow
 
  double precision   :: noincr_threshold
  logical            :: print_summary, print_debug, truncate
+ 
+ double precision   :: snd_threshold=0.0001, swe_threshold=0.00001
+
+ double precision   :: fice_threshold, lfrac_threshold
 
  namelist /noahmp_snow/ date_str, hour_str, res, frac_grid, rst_path, inc_path, orog_path, otype, ntiles, ens_size, &
-                        noincr_threshold, print_summary, print_debug, truncate
+                        noincr_threshold, print_summary, print_debug, truncate, fice_threshold, lfrac_threshold
 
     call mpi_init(ierr)
     call mpi_comm_size(mpi_comm_world, nprocs, ierr)
@@ -67,6 +71,8 @@ program apply_incr_noahmp_snow
     print_summary = .true.
     print_debug = .false.
     truncate = .false.
+    fice_threshold=0.0
+    lfrac_threshold=0.0001
 
     ! READ NAMELIST 
     inquire (file='apply_incr_nml', exist=file_exists) 
@@ -112,10 +118,11 @@ program apply_incr_noahmp_snow
             rst_path_full = trim(rst_path)      
             inc_path_full = trim(inc_path)      
         endif
+        
+        ! Calculate MAPPING INDEX based on land fraction
+        call get_fv3_mapping_lfrac(tile_num, rst_path_full, date_str, hour_str, res, &
+             orog_path, otype, frac_grid, lfrac_threshold, fice_threshold, len_land_vec, tile2vector)
 
-        ! GET MAPPING INDEX (see subroutine comments re: source of land/sea mask)
-        call get_fv3_mapping(myrank, ens_mem, tile_num, rst_path_full, date_str, hour_str, res, len_land_vec, frac_grid, tile2vector)
-    
         ! SET-UP THE NOAH-MP STATE  AND INCREMENT        
         ! The allocations are inside the loop because different ensemble members could have different len_land_vec
         allocate(noahmp_state%swe                (len_land_vec)) ! values over land only
@@ -154,7 +161,7 @@ program apply_incr_noahmp_snow
         endif 
 
         ! ADJUST THE SNOW STATES OVER LAND
-!TODO: return and check error code from this call (for now assume it is well handled inside function)
+        !TODO: return and check error code from this call (for now assume it is well handled inside function)
         call UpdateAllLayers(len_land_vec, increment, noahmp_state, noincr_threshold, print_summary, print_debug)
 
         ! IF FRAC GRID, ADJUST SNOW STATES OVER GRID CELL
@@ -165,14 +172,26 @@ program apply_incr_noahmp_snow
                     grid_state)
 
             do n=1,len_land_vec 
-                    grid_state%swe(n) = grid_state%swe(n) + & 
+                grid_state%swe(n) = grid_state%swe(n) + & 
                                     grid_state%land_frac(n)* ( noahmp_state%swe(n) - swe_back(n)) 
-                    grid_state%snow_depth(n) = grid_state%snow_depth(n) + & 
+                grid_state%snow_depth(n) = grid_state%snow_depth(n) + & 
                                     grid_state%land_frac(n)* ( noahmp_state%snow_depth(n) - snow_depth_back(n)) 
+                ! check for negative values
+                if((grid_state%snow_depth(n) <=  snd_threshold) .or. (grid_state%swe(n) <=  swe_threshold)) then
+                    noahmp_state%swe                (n)   = 0.0
+                    noahmp_state%snow_depth         (n)   = 0.0
+                    noahmp_state%active_snow_layers (n)   = 0.0
+                    noahmp_state%swe_previous       (n)   = 0.0
+                    noahmp_state%snow_soil_interface(n,:) = (/0.0,0.0,0.0,-0.1,-0.4,-1.0,-2.0/)
+                    noahmp_state%temperature_snow   (n,:) = 0.0
+                    noahmp_state%snow_ice_layer     (n,:) = 0.0
+                    noahmp_state%snow_liq_layer     (n,:) = 0.0
+                    grid_state%snow_depth           (n)   = 0.0
+                    grid_state%swe                  (n)   = 0.0
+                endif
             enddo
-
         endif
-
+        
         ! WRITE OUT ADJUSTED RESTART
         call   write_fv3_restart(trim(restart_file), noahmp_state, grid_state, res, ncid, len_land_vec, & 
                     frac_grid, tile2vector) 
@@ -183,6 +202,7 @@ program apply_incr_noahmp_snow
         
         ! Deallocate. These are required incase a single process loops through multiple tiles with different mapping     
         if (allocated(tile2vector)) deallocate(tile2vector)   
+                
         deallocate(noahmp_state%swe) ! values over land only
         deallocate(noahmp_state%snow_depth) ! values over land only 
         deallocate(noahmp_state%active_snow_layers) 
@@ -233,48 +253,86 @@ program apply_incr_noahmp_snow
         return
  end subroutine netcdf_err
 
-
 !--------------------------------------------------------------
-! Get land sea mask from fv3 restart, and use to create 
-! index for mapping from tiles (FV3 UFS restart) to vector
-!  of land locations (offline Noah-MP restart)
-! NOTE: slmsk in the restarts counts grid cells as land if 
-!       they have a non-zero land fraction. Excludes grid 
-!       cells that are surrounded by sea (islands). The slmsk 
-!       in the oro_grid files (used by JEDI for screening out 
-!       obs is different, and counts grid cells as land if they 
-!       are more than 50% land (same exclusion of islands). If 
-!       we want to change these definitations, may need to use 
-!       land_frac field from the oro_grid files.
+! create index for mapping from tiles (FV3 UFS restart) to vector
+! of land locations (offline Noah-MP restart) based on fraction of land 
+! (land_frac) field from the oro_grid files.
+! !> mask = 1 (land) if: land frac >= lfrac_threshold = 0.01%
+!                        && fice (sea ice) not > fice_threshold = 0.0
+!                        && veg type not 15 (land ice)
+!
+! Note: These masks do NOT have exclusion of islands. 
 !--------------------------------------------------------------
 
- subroutine get_fv3_mapping(myrank, ens_mem, tile_num, rst_path, date_str, hour_str, res, & 
-                len_land_vec, frac_grid, tile2vector)
+ subroutine get_fv3_mapping_lfrac(tile_num, rst_path, date_str, hour_str, res, & 
+            orog_path, otype, fice_grid, lfrac_thold, fice_fhold, len_land_vec, tile2vector)
 
  implicit none 
 
  include 'mpif.h'
 
- integer, intent(in) :: myrank, ens_mem, tile_num, res
+ integer, intent(in)          :: tile_num, res
  character(len=*), intent(in) :: rst_path
  character(len=8), intent(in) :: date_str 
  character(len=2), intent(in) :: hour_str 
- logical, intent(in) :: frac_grid
+ character(len=*), intent(in)   :: orog_path
+ character(len=20), intent(in)  :: otype
+ logical, intent(in)            :: fice_grid
+ double precision, intent(in)      :: lfrac_thold, fice_fhold
+ integer, intent(out)              :: len_land_vec
  integer, allocatable, intent(out) :: tile2vector(:,:)
- integer :: len_land_vec
 
- character(len=512) :: restart_file
- character(len=1) :: rankch
+ character(len=512) :: restart_file, filename
+ character(len=1)   :: rankch
  logical :: file_exists
- integer :: ierr,  ncid
+ integer :: ierr, ncid
  integer :: id_dim, id_var, fres
- integer :: slmsk(res,res) ! saved as double in the file, but i think this is OK
- integer :: vtype(res,res) ! saved as double in the file, but i think this is OK
- integer, parameter :: vtype_landice=15
- double precision :: fice(res,res)
- double precision, parameter :: fice_fhold = 0.00001
- integer :: i, j, nn
 
+ integer            :: slmsk_rest(res,res), slmsk_lfrac(res,res)
+ double precision   :: fice(res,res)
+ double precision   :: vtype(res,res)     ! saved as double in the file
+ double precision   :: land_frac(res,res)
+ integer, parameter :: vtype_landice=15   !, vtype_water=17
+ integer            :: i, j, nn, len_land_vec_rest, diff_count
+ integer, allocatable  :: tile2vector_rest(:,:), tile2vector_diff(:,:)
+
+    ! OPEN FILE
+    write(rankch, '(i1.1)') (tile_num)
+    filename =trim(orog_path)//"/"//trim(otype)//".tile"//rankch//".nc"
+
+    inquire(file=trim(filename), exist=file_exists)
+
+    if (.not. file_exists) then
+            print *, 'filename does not exist, ', &
+                    trim(filename) , ' exiting'
+            call mpi_abort(mpi_comm_world, 10) 
+    endif
+
+    ierr=nf90_open(trim(filename),nf90_nowrite,ncid)
+    call netcdf_err(ierr, 'opening file: '//trim(filename) )
+
+    ! CHECK DIMENSIONS
+    ierr=nf90_inq_dimid(ncid, 'lon', id_dim)
+    call netcdf_err(ierr, 'reading lon id from '//trim(filename) )
+    ierr=nf90_inquire_dimension(ncid,id_dim,len=fres)
+    call netcdf_err(ierr, 'reading lon from '//trim(filename) )
+
+    if ( fres /= res) then
+       print*,'fatal error: dimensions wrong in file '//trim(filename)
+       call mpi_abort(mpi_comm_world, ierr)
+    endif
+
+    ! READ land frac 
+    ierr=nf90_inq_varid(ncid, "land_frac", id_var)
+    call netcdf_err(ierr, 'reading land_frac id' )
+    ierr=nf90_get_var(ncid, id_var, land_frac)
+    call netcdf_err(ierr, 'reading land_frac' )
+
+    ! close file 
+    ierr=nf90_close(ncid)
+    call netcdf_err(ierr, 'closing file: '//trim(filename) )
+    
+    ! Use vtype to exclude glaciers
     ! OPEN FILE
     write(rankch, '(i1.1)') (tile_num)
     restart_file = trim(rst_path)//"/"//date_str//"."//hour_str//"0000.sfc_data.tile"//rankch//".nc"
@@ -289,58 +347,89 @@ program apply_incr_noahmp_snow
 
     ierr=nf90_open(trim(restart_file),nf90_write,ncid)
     call netcdf_err(ierr, 'opening file: '//trim(restart_file) )
-
-    ! READ MASK 
+ 
+    ! READ MASK from restart
     ierr=nf90_inq_varid(ncid, "slmsk", id_var)
     call netcdf_err(ierr, 'reading slmsk id' )
-    ierr=nf90_get_var(ncid, id_var, slmsk)
-    call netcdf_err(ierr, 'reading slmsk' )
- 
+    ierr=nf90_get_var(ncid, id_var, slmsk_rest)
+    call netcdf_err(ierr, 'reading slmsk from restart' )
+
     ! REMOVE GLACIER GRID POINTS
     ierr=nf90_inq_varid(ncid, "vtype", id_var)
     call netcdf_err(ierr, 'reading vtype id' )
     ierr=nf90_get_var(ncid, id_var, vtype)
     call netcdf_err(ierr, 'reading vtype' )
 
-    ! remove land grid cells if glacier land type
-    do i = 1, res 
-        do j = 1, res  
-            if ( vtype(i,j) ==  vtype_landice)  slmsk(i,j)=0 ! vtype is integer, but stored as double
-        enddo 
-    enddo
- 
-    if (frac_grid) then 
-
-        write (6, *) 'fractional grid: ammending mask to exclude sea ice from', trim(restart_file)
-
-        ierr=nf90_inq_varid(ncid, "fice", id_var)
-        call netcdf_err(ierr, 'reading fice id' )
-        ierr=nf90_get_var(ncid, id_var, fice)
-        call netcdf_err(ierr, 'reading fice' )
-
-        ! remove land grid cells if ice is present
-        do i = 1, res 
-            do j = 1, res  
-                if (fice(i,j) > fice_fhold ) slmsk(i,j)=0
-            enddo 
-        enddo
-
+    if (fice_grid) then    
+      ierr=nf90_inq_varid(ncid, "fice", id_var)
+      call netcdf_err(ierr, 'reading fice id' )
+      ierr=nf90_get_var(ncid, id_var, fice)
+      call netcdf_err(ierr, 'reading fice' )   
     endif
- 
+
+    ! close file
+    ierr=nf90_close(ncid)
+    call netcdf_err(ierr, 'closing file: '//trim(restart_file) )
+
+    slmsk_lfrac = 0
+    do i = 1, res
+        do j = 1, res
+            if ( land_frac(i,j) >= lfrac_thold ) slmsk_lfrac(i,j) = 1
+        enddo
+    enddo
+
+    ! remove land grid cells if ice is present
+    if (fice_grid) then
+        write (6, *) 'ammending mask to exclude sea ice from', trim(restart_file)
+        do i = 1, res
+            do j = 1, res
+                if (fice(i,j) > fice_fhold ) then 
+                        slmsk_lfrac(i,j) = 0
+                        slmsk_rest(i,j) = 0
+                endif
+            enddo
+        enddo
+    endif
+
+    ! remove land grid cells if glacier land type
+    do i = 1, res
+        do j = 1, res
+            if ( nint(vtype(i,j)) ==  vtype_landice) then  ! vtype is integer, but stored as double
+                    slmsk_lfrac(i,j) = 0 
+                    slmsk_rest(i,j) = 0
+            endif
+        enddo
+    enddo
+
     ! get number of land points
     len_land_vec = 0
     do i = 1, res 
         do j = 1, res 
-             if ( slmsk(i,j) == 1)  len_land_vec = len_land_vec+ 1  
+             if ( slmsk_lfrac(i,j) == 1)  len_land_vec = len_land_vec + 1  
         enddo 
     enddo
     
+    len_land_vec_rest = 0
+    do i = 1, res
+        do j = 1, res
+             if ( slmsk_rest(i,j) > 0)  len_land_vec_rest = len_land_vec_rest + 1
+        enddo
+    enddo
+
+    if (len_land_vec .ne. len_land_vec_rest) then 
+        print*, "number of land points from "//trim(filename)//" not consitent with those from "//trim(restart_file)
+        print*, "orog land points = ",len_land_vec," restart land points = ", len_land_vec_rest 
+        call mpi_abort(mpi_comm_world, 10)
+    endif
+
     allocate(tile2vector(len_land_vec,2)) 
+    allocate(tile2vector_rest(len_land_vec,2))
+    allocate(tile2vector_diff(len_land_vec,2))
 
     nn=0
     do i = 1, res 
         do j = 1, res 
-             if ( slmsk(i,j) == 1)   then 
+             if ( slmsk_lfrac(i,j) == 1)   then 
                 nn=nn+1
                 tile2vector(nn,1) = i 
                 tile2vector(nn,2) = j 
@@ -348,8 +437,28 @@ program apply_incr_noahmp_snow
         enddo 
     enddo
 
-end subroutine get_fv3_mapping
+    nn=0
+    do i = 1, res
+        do j = 1, res
+             if ( slmsk_rest(i,j) > 0) then  ! some land points are marked 2 (snow) during ufs calls
+                nn=nn+1
+                tile2vector_rest(nn,1) = i
+                tile2vector_rest(nn,2) = j
+             endif
+        enddo
+    enddo
 
+    !check mask consistency from restart and orog
+    tile2vector_diff = tile2vector_rest - tile2vector
+    diff_count = count(abs(tile2vector_diff) > 0)
+    if (diff_count > 0) then 
+        print*, diff_count, " differences between land mask from "//trim(filename)//" and from "//trim(restart_file)
+        call mpi_abort(mpi_comm_world, 10)
+    endif
+
+    deallocate(tile2vector_rest, tile2vector_diff)
+
+end subroutine get_fv3_mapping_lfrac
 
 !--------------------------------------------------------------
 ! open fv3 restart, and read in required variables
@@ -496,7 +605,7 @@ end subroutine read_fv3_restart
        call mpi_abort(mpi_comm_world, ierr)
     endif
 
-   ! read swe over grid cell  (file name: sheleg, vert dim 1) 
+   ! read land_frac over grid cell (file name: land_frac, vert dim 1) 
     call read_nc_var2D(ncid, trim(filename), len_land_vec, res, tile2vector, 0, & 
                         'land_frac  ', grid_state%land_frac)
 

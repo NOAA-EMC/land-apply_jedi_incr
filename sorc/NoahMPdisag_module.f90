@@ -27,6 +27,10 @@ module NoahMPdisag_module
 contains
 
   subroutine UpdateAllLayers(vector_length, increment, noahmp, noincr_threshold, print_out_summary, print_debug)
+  
+   implicit none
+
+   include 'mpif.h'
 
  ! intent(in)
   integer, intent(in)                :: vector_length
@@ -256,38 +260,7 @@ contains
     else
         count0 = count0+1
     end if ! non-zero increment
-    ! do some gross checks 
-    if(abs(snow_soil_interface(iloc,7) - snow_soil_interface(iloc,3) + 2.d0) > 0.0000001) then
-      print*, "Depth of soil not 2m"
-      print*, "pathway", pathway
-      print*, snow_soil_interface(iloc,7), snow_soil_interface(iloc,3)
-!      stop
-    end if
-
-    if(active_snow_layers(iloc) < 0.0 .and. abs(snow_depth(iloc) + 1000.d0*snow_soil_interface(iloc,3)) > 0.0000001) then
-      print*, "snow_depth and snow_soil_interface inconsistent"
-      print*, "pathway", pathway
-      print*, active_snow_layers(iloc), snow_depth(iloc), snow_soil_interface(iloc,3)
-!      stop
-    end if
-
-    if(snow_depth(iloc) < 0.0 .or. snow_soil_interface(iloc,3) > 0.0 ) then
-      print*, "snow depth or interface has wrong sign"
-      print*, "pathway ", pathway
-      print*, snow_depth(iloc), snow_soil_interface(iloc,3)
-!      stop
-    end if
-
-    if (print_debug_out) then
-      if( (abs(anal_snow_depth - snow_depth(iloc))   > 0.01) .and. (anal_snow_depth > 0.0001) .and. temperature_soil(iloc) <= 273.155 ) then
-  ! this condition will fail if snow added was limitted to 50mm to avoid layering issues
-        print*, "snow increment and updated model snow inconsistent"
-        print*, "pathway", pathway
-        print*, anal_snow_depth, snow_depth(iloc), temperature_soil(iloc)
-  !      stop
-      end if
-    end if
-
+    
   end do
 
   if (print_out_summary) then 
@@ -302,6 +275,7 @@ contains
     print *, "Increment added in zero-layer mode, added a layer", count6
     print *, "Increment removed snow in zero-layer mode", count7
     print *, "Positive increment skipped (pathway 8) on snow depth exceeding peak threshold", count8
+
   endif
 
   end associate
