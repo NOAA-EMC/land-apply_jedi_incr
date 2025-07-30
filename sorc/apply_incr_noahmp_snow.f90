@@ -50,10 +50,10 @@ program apply_incr_noahmp_snow
  
  double precision   :: snd_threshold=0.0001, swe_threshold=0.00001
 
- double precision   :: fice_threshold, lfrac_threshold
+ double precision   :: fice_threshold=0.0, lfrac_threshold=0.0001
 
  namelist /noahmp_snow/ date_str, hour_str, res, frac_grid, rst_path, inc_path, orog_path, otype, ntiles, ens_size, &
-                        noincr_threshold, print_summary, print_debug, truncate, fice_threshold, lfrac_threshold
+                        noincr_threshold, print_summary, print_debug, truncate
 
     call mpi_init(ierr)
     call mpi_comm_size(mpi_comm_world, nprocs, ierr)
@@ -71,8 +71,6 @@ program apply_incr_noahmp_snow
     print_summary = .true.
     print_debug = .false.
     truncate = .false.
-    fice_threshold=0.0
-    lfrac_threshold=0.0001
 
     ! READ NAMELIST 
     inquire (file='apply_incr_nml', exist=file_exists) 
