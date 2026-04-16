@@ -50,6 +50,25 @@ program apply_incr_noahmp_soil
 
  double precision   :: fice_threshold, lfrac_threshold
 
+
+ !****** adding for soil
+ ! for add_soil_inc() subroutine
+ 
+ integer :: lsoil_incr, lensfc, lsoil, myrank, lsm
+
+ real ;intent(in)                   :: stcinc(lensfc,lsoil)
+ real (in)                   :: slcinc(lensfc,lsoil)
+ integer, intent(in)      :: soilsnow_tile(lensfc), soilsnow_fg_tile(lensfc)
+ 
+ real, intent(inout)      :: stc_state(lensfc, lsoil)
+ real, intent(inout)      :: slc_state(lensfc, lsoil)
+ real, intent(inout)      :: smc_state(lensfc, lsoil)
+ integer, intent(out)     :: stc_updated(lensfc), slc_updated(lensfc)
+
+
+
+             
+
  namelist /noahmp_snow/ date_str, hour_str, res, frac_grid, rst_path, inc_path, orog_path, otype, ntiles, ens_size, &
                         noincr_threshold, print_summary, print_debug, truncate, fice_threshold, lfrac_threshold
 
@@ -158,6 +177,11 @@ program apply_incr_noahmp_soil
             snow_depth_back = noahmp_state%snow_depth
         endif 
 
+
+        call add_increment_soil(lsoil_incr,stcinc,slcinc,stc_state,smc_state,slc_state,stc_updated,&
+              slc_updated,soilsnow_tile,soilsnow_fg_tile,lensfc,lsoil,lsm,myrank)
+
+              
         ! ADJUST THE SNOW STATES OVER LAND
         !TODO: return and check error code from this call (for now assume it is well handled inside function)
         call UpdateAllLayers(len_land_vec, increment, noahmp_state, noincr_threshold, print_summary, print_debug)
