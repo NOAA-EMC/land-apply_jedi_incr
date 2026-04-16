@@ -66,6 +66,16 @@ program apply_incr_noahmp_soil
  integer, intent(out)     :: stc_updated(lensfc), slc_updated(lensfc)
 
 
+! for soil adjustment 
+integer, intent(in)           :: lsoil_incr, lsm, lensfc, lsoil, isot, ivegsrc
+    real, intent(in)              :: rsoiltype(lensfc) ! soil types, as real
+    integer, intent(in)           :: mask(lensfc)
+    real, intent(in)              :: stc_bck(lensfc, lsoil)
+    integer, intent(in)           :: stc_updated(lensfc), slc_updated(lensfc)
+    real, intent(inout)           :: smc_adj(lensfc,lsoil), slc_adj(lensfc,lsoil) 
+    real, intent(inout)           :: stc_adj(lensfc, lsoil)
+    real(kind=4), intent(in)      :: zsoil(lsoil)
+
 
              
 
@@ -180,6 +190,13 @@ program apply_incr_noahmp_soil
 
         call add_increment_soil(lsoil_incr,stcinc,slcinc,stc_state,smc_state,slc_state,stc_updated,&
               slc_updated,soilsnow_tile,soilsnow_fg_tile,lensfc,lsoil,lsm,myrank)
+
+
+        call  apply_land_da_adjustments_soil(lsoil_incr, lsm, isot, ivegsrc,lensfc, &
+                 lsoil, rsoiltype, mask, stc_bck, stc_adj, smc_adj, slc_adj, &
+                 stc_updated, slc_updated, zsoil)
+    
+
 
               
         ! ADJUST THE SNOW STATES OVER LAND
