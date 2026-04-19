@@ -39,30 +39,32 @@ contains
  !! @param[in] LENSFC Number of land points on a tile
  !! @param[in] LSOIL Number of soil layers
  !! @param[in] LSOIL_INCR Number of soil layers (from top) to apply soil increments to
- !! @param[in] lsm Integer flag indicating which land model is used 
  !! @param[in] MYRANK MPI rank number
  !!
  !! @author Yuan Xue. 11/2023
+ !! updates April 2024, Tseganeh ZG: (calling from jedi-apply_lnd_inc)
+ !! stc_upd, slc_upd user inputs
+ !! mpi init in calling rourine
+ !! applying only for NoahMP
 
 subroutine add_increment_soil(lsoil_incr,stcinc,slcinc,stc_state,smc_state,slc_state,stc_updated,&
-              slc_updated,soilsnow_tile,soilsnow_fg_tile,lensfc,lsoil,lsm,myrank)
+              slc_updated,soilsnow_tile,soilsnow_fg_tile,lensfc,lsoil,myrank, upd_stc, upd_slc, print_summary, print_debug)
 
     use mpi
 
     implicit none
 
-    integer, intent(in)      :: lsoil_incr, lensfc, lsoil, myrank, lsm
+    integer, intent(in)      :: lsoil_incr, lensfc, lsoil, myrank
 
     integer, intent(in)      :: soilsnow_tile(lensfc), soilsnow_fg_tile(lensfc)
     real, intent(inout)      :: stc_state(lensfc, lsoil)
     real, intent(inout)      :: slc_state(lensfc, lsoil)
     real, intent(inout)      :: smc_state(lensfc, lsoil)
     integer, intent(out)     :: stc_updated(lensfc), slc_updated(lensfc)
-
+    logical, intent(in)      :: upd_stc, upd_slc, print_summary, print_debug
     
     integer                  :: ij
     integer                  :: mask_tile, mask_fg_tile
-    logical                  :: upd_slc, upd_stc
 
     real                     :: stcinc(lensfc,lsoil)
     real                     :: slcinc(lensfc,lsoil)
@@ -74,20 +76,13 @@ subroutine add_increment_soil(lsoil_incr,stcinc,slcinc,stc_state,smc_state,slc_s
     stc_updated=0
     slc_updated=0
 
-    if (lsm==lsm_noah) then
-        upd_stc=.true.
-        upd_slc=.false. ! not coded
-    elseif (lsm==lsm_noahmp) then
-        upd_stc=.true.
-        upd_slc=.true.
+    if (print_summary .and. myrank==0) then
+      print*
+      print*,'add soil increments on cubed-sphere tiles'
+      print*,'updating soil temps', upd_stc
+      print*,'updating soil moisture', upd_slc
+      print*,'adding to first ', lsoil_incr, ' surface layers only'
     endif
-
-    print*
-    print*,'adjust soil using increments on cubed-sphere tiles'
-    print*,'updating soil temps', upd_stc
-    print*,'updating soil moisture', upd_slc
-    print*,'adjusting first ', lsoil_incr, ' surface layers only'
-
     ! initialize variables for counts statitics to be zeros
     nother = 0 ! grid cells not land
     nsnowupd = 0  ! grid cells with snow (temperature not yet updated)
@@ -137,7 +132,7 @@ subroutine add_increment_soil(lsoil_incr,stcinc,slcinc,stc_state,smc_state,slc_s
              if ( smc_state(ij,k) - slc_state(ij,k) > 0.001 )  soil_ice=.true.
 
              if (upd_stc) then
-                stc_state(ij,k) = stc_state(ij,k) + stcinc(ij,k)
+                stc_state(ij,k) = stc_state(ij,k) + stcinc(ij,k)     !TODO: do not add if < min_inc
                 if (k==1) then
                     stc_updated(ij) = 1
                     nstcupd = nstcupd + 1
@@ -168,15 +163,29 @@ subroutine add_increment_soil(lsoil_incr,stcinc,slcinc,stc_state,smc_state,slc_s
         endif ! if soil/snow point
 
    enddo ij_loop
+   
+   if (print_summary .and. myrank==0) then 
+     write(*,'(a,i2)') ' statistics of grids number processed for rank : ', myrank
+     write(*,'(a,i8)') ' soil grid total', lensfc
+     write(*,'(a,i8)') ' soil grid cells slc updated = ',nslcupd
+     write(*,'(a,i8)') ' soil grid cells stc updated = ',nstcupd
+     write(*,'(a,i8)') ' soil grid cells not updated, frozen = ',nfrozen
+     write(*,'(a,i8)') ' soil grid cells update, became frozen = ',nfrozen_upd
+     write(*,'(a,i8)') ' (not updated yet) snow grid cells = ', nsnowupd
+     write(*,'(a,i8)') ' grid cells, without soil or snow = ', nother
+   endif
 
-   write(*,'(a,i2)') ' statistics of grids number processed for rank : ', myrank
-   write(*,'(a,i8)') ' soil grid total', lensfc
-   write(*,'(a,i8)') ' soil grid cells slc updated = ',nslcupd
-   write(*,'(a,i8)') ' soil grid cells stc updated = ',nstcupd
-   write(*,'(a,i8)') ' soil grid cells not updated, frozen = ',nfrozen
-   write(*,'(a,i8)') ' soil grid cells update, became frozen = ',nfrozen_upd
-   write(*,'(a,i8)') ' (not updated yet) snow grid cells = ', nsnowupd
-   write(*,'(a,i8)') ' grid cells, without soil or snow = ', nother
+   if (print_debug) then
+     write(*,'(a,i2)') ' statistics of grids number processed for rank : ', myrank
+     write(*,'(a,i8)') ' soil grid total', lensfc
+     write(*,'(a,i8)') ' soil grid cells slc updated = ',nslcupd
+     write(*,'(a,i8)') ' soil grid cells stc updated = ',nstcupd
+     write(*,'(a,i8)') ' soil grid cells not updated, frozen = ',nfrozen
+     write(*,'(a,i8)') ' soil grid cells update, became frozen = ',nfrozen_upd
+     write(*,'(a,i8)') ' (not updated yet) snow grid cells = ', nsnowupd
+     write(*,'(a,i8)') ' grid cells, without soil or snow = ', nother
+   endif
+
 
 end subroutine add_increment_soil
 
@@ -233,7 +242,6 @@ end subroutine calculate_landinc_mask
 !! Case 4: unfrozen ==> unfrozen along with other cases, (e.g., soil temp=tfrz),do nothing
 !! Note: For Case 3, Yuan Xue thoroughly evaluated a total of four options and
 !! current option is found to be the best as of 11/09/2023
-!! @param[in] lsm Integer code for the LSM
 !! @param[in] isot Integer code for the soil type data set
 !! @param[in] ivegsrc Integer code for the vegetation type data set
 !! @param[in] lensfc Number of land points for this tile
@@ -248,11 +256,15 @@ end subroutine calculate_landinc_mask
 !! @param[in] slc_updated Integer to record whether SLC in each grid cell was updated
 !! @param[in] zsoil Depth of bottom of each soil layer
 !! @author Clara Draper @date April 2021
-!! @param[in] isoiltype Array of input soil types, dtype=integer (porting to jedi-apply_lnd_inc: TZG: April 2026)
+!! updates April 2024, Tseganeh ZG: (calling from jedi-apply_lnd_inc) 
+!! stc_upd, slc_upd user inputs
+!! mpi init in calling rourine
+!! applying only for NoahMP
+!! @param[in] isoiltype (soil types) dtype=integer (directly using in jedi-apply_lnd_inc)
 
-subroutine apply_land_da_adjustments_soil(lsoil_incr, lsm, isot, ivegsrc,lensfc, &
+subroutine apply_land_da_adjustments_soil(lsoil_incr, isot, ivegsrc,lensfc, &
                  lsoil, isoiltype, mask, stc_bck, stc_adj, smc_adj, slc_adj, &
-                 stc_updated, slc_updated, zsoil)
+                 stc_updated, slc_updated, zsoil, upd_stc, upd_slc, myrank, print_summary, print_debug)
 
     use mpi
     use set_soilveg_snippet_mod, only: set_soilveg_noah,set_soilveg_noahmp
@@ -260,7 +272,7 @@ subroutine apply_land_da_adjustments_soil(lsoil_incr, lsm, isot, ivegsrc,lensfc,
 
     implicit none
  
-    integer, intent(in)           :: lsoil_incr, lsm, lensfc, lsoil, isot, ivegsrc
+    integer, intent(in)           :: lsoil_incr, lensfc, lsoil, isot, ivegsrc, myrank
     integer, intent(in)           :: isoiltype(lensfc) ! soil types, integer 4.17.26
     integer, intent(in)           :: mask(lensfc)
     real, intent(in)              :: stc_bck(lensfc, lsoil)
@@ -268,15 +280,14 @@ subroutine apply_land_da_adjustments_soil(lsoil_incr, lsm, isot, ivegsrc,lensfc,
     real, intent(inout)           :: smc_adj(lensfc,lsoil), slc_adj(lensfc,lsoil) 
     real, intent(inout)           :: stc_adj(lensfc, lsoil)
     real(kind=4), intent(in)      :: zsoil(lsoil)
-    
+    logical, intent(in)           :: upd_slc, upd_stc, print_summary, print_debug
 
     logical                       :: frzn_bck, frzn_anl
     logical                       :: soil_freeze, soil_ice
 
     integer                       :: i, l, n_freeze, n_thaw, ierr
-    integer                       :: myrank, soiltype, iret, n_stc, n_slc
-    logical                       :: upd_slc, upd_stc
-
+    integer                       :: soiltype, iret, n_stc, n_slc
+    
     real                          :: slc_new
 
     real, parameter               :: tfreez=273.16 !< con_t0c  in physcons
@@ -287,124 +298,77 @@ subroutine apply_land_da_adjustments_soil(lsoil_incr, lsm, isot, ivegsrc,lensfc,
     real, parameter          :: grav=9.80616   !< gravity accel.(m/s2)
     real                     :: smp !< for computing supercooled water 
 
-    call mpi_comm_rank(mpi_comm_world, myrank, ierr)
 
-    if (lsm==lsm_noah) then 
-        upd_stc=.true.
-        upd_slc=.false.
-    elseif (lsm==lsm_noahmp) then 
-        upd_stc=.true.
-        upd_slc=.true.
+    if (upd_stc) then
+
+      call set_soilveg_noahmp(isot, ivegsrc, maxsmc, bb, satpsi, iret)
+      if (iret < 0) then
+           print *, 'FATAL ERROR: problem in set_soilveg_noahmp'
+           call mpi_abort(mpi_comm_world, 10, ierr)
+      endif
+
+      n_stc = 0
+      n_slc = 0
+
+      do i=1,lensfc
+        if (stc_updated(i) == 1 ) then ! soil-only location
+            n_stc = n_stc+1
+            soiltype = isoiltype(i)     !nint(rsoiltype(i))
+            do l = 1, lsoil_incr
+               !case 1: frz ==> frz, recalculate slc, smc remains
+               !case 2: unfrz ==> frz, recalculate slc, smc remains
+               !both cases are considered in the following if case
+               if (stc_adj(i,l) .LT. tfreez )then
+                  !recompute supercool liquid water,smc_anl remain unchanged
+                  smp = hfus*(tfreez-stc_adj(i,l))/(grav*stc_adj(i,l)) !(m)
+                  slc_new=maxsmc(soiltype)*(smp/satpsi(soiltype))**(-1./bb(soiltype))
+                  slc_adj(i,l) = max( min( slc_new, smc_adj(i,l)), 0.0 )
+               endif
+               !case 3: frz ==> unfrz, melt all soil ice (if any)
+               if (stc_adj(i,l) .GT. tfreez )then !do not rely on stc_bck
+                  slc_adj(i,l)=smc_adj(i,l)
+               endif
+            enddo
+        endif
+      enddo
+
+    endif  
+
+    if (upd_slc) then
+
+      dz(1) = -zsoil(1)
+      do l = 2,lsoil 
+          dz(l) = -zsoil(l) + zsoil(l-1) 
+      enddo 
+      print *, 'Applying soil moisture mins ' 
+
+      do i=1,lensfc
+      if (slc_updated(i) == 1 ) then 
+          n_slc = n_slc+1
+          ! apply SM bounds (later: add upper SMC limit)
+          do l = 1, lsoil_incr
+            ! noah-mp minimum is 1 mm per layer (in SMC)
+            ! no need to maintain frozen amount, would be v. small.
+            slc_adj(i,l) = max( 0.001/dz(l), slc_adj(i,l) )
+            smc_adj(i,l) = max( 0.001/dz(l), smc_adj(i,l) )
+          enddo
+       endif
+      enddo
     endif
 
-    select case (lsm ) 
-    case(lsm_noah)  
-        ! initialise soil properties
-        call set_soilveg_noah(isot, ivegsrc, maxsmc, bb, satpsi, iret)
-        if (iret < 0) then
-            print *, 'FATAL ERROR: problem in set_soilveg_noah'
-            call mpi_abort(mpi_comm_world, 10, ierr)
-        endif
+    if (print_summary .and. myrank==0) then
+      write(*,'(a,i2)') 'statistics of grids number processed for rank : ', myrank
+      write(*,'(a,i8)') ' soil grid total', lensfc
+      write(*,'(a,i8)') ' soil grid cells with slc update', n_slc
+      write(*,'(a,i8)') ' soil grid cells with stc update', n_stc
+    endif
 
-        print *, 'Adjusting noah model smc after stc DA update'
-
-        n_freeze = 0
-        n_thaw = 0
-        
-        do i=1,lensfc
-          if (mask(i) > 0) then ! if soil location
-            do l = 1, lsoil
-               frzn_bck = (stc_bck(i,l) .LT. tfreez )
-               frzn_anl = (stc_adj(i,l) .LT. tfreez )
-
-               if (frzn_bck .eqv. frzn_anl) then
-                    cycle
-               elseif (frzn_bck .and. .not. frzn_anl) then
-                    n_thaw = n_thaw + 1
-               else
-                    n_freeze = n_freeze + 1
-               endif
-
-               ! make adjustment (same routine for both)
-               soiltype = isoiltype(i)
-               ! bb and maxsmc are in the namelist_soilveg, need soiltype index
-               call frh2o(stc_adj(i,l), smc_adj(i,l),slc_adj(i,l), maxsmc(soiltype), &
-                          bb(soiltype), satpsi(soiltype),slc_new)
-
-               slc_adj(i,l) = max( min( slc_new, smc_adj(i,l)), 0.0 )
-            enddo
-          endif
-        enddo
-        print *, 'adjusted: ', n_thaw,' thawed,', n_freeze, ' frozen'
-
-    case (lsm_noahmp) 
-
-        if (upd_stc) then
-
-          call set_soilveg_noahmp(isot, ivegsrc, maxsmc, bb, satpsi, iret)
-          if (iret < 0) then
-               print *, 'FATAL ERROR: problem in set_soilveg_noahmp'
-               call mpi_abort(mpi_comm_world, 10, ierr)
-          endif
-
-          n_stc = 0
-          n_slc = 0
-
-          do i=1,lensfc
-            if (stc_updated(i) == 1 ) then ! soil-only location
-                n_stc = n_stc+1
-                soiltype = isoiltype(i)     !nint(rsoiltype(i))
-                do l = 1, lsoil_incr
-                   !case 1: frz ==> frz, recalculate slc, smc remains
-                   !case 2: unfrz ==> frz, recalculate slc, smc remains
-                   !both cases are considered in the following if case
-                   if (stc_adj(i,l) .LT. tfreez )then
-                      !recompute supercool liquid water,smc_anl remain unchanged
-                      smp = hfus*(tfreez-stc_adj(i,l))/(grav*stc_adj(i,l)) !(m)
-                      slc_new=maxsmc(soiltype)*(smp/satpsi(soiltype))**(-1./bb(soiltype))
-                      slc_adj(i,l) = max( min( slc_new, smc_adj(i,l)), 0.0 )
-                   endif
-                   !case 3: frz ==> unfrz, melt all soil ice (if any)
-                   if (stc_adj(i,l) .GT. tfreez )then !do not rely on stc_bck
-                      slc_adj(i,l)=smc_adj(i,l)
-                   endif
-                enddo
-            endif
-          enddo
-
-        endif  
-
-        if (upd_slc) then
-
-          dz(1) = -zsoil(1)
-          do l = 2,lsoil 
-              dz(l) = -zsoil(l) + zsoil(l-1) 
-          enddo 
-          print *, 'Applying soil moisture mins ' 
-
-          do i=1,lensfc
-          if (slc_updated(i) == 1 ) then 
-              n_slc = n_slc+1
-              ! apply SM bounds (later: add upper SMC limit)
-              do l = 1, lsoil_incr
-                ! noah-mp minimum is 1 mm per layer (in SMC)
-                ! no need to maintain frozen amount, would be v. small.
-                slc_adj(i,l) = max( 0.001/dz(l), slc_adj(i,l) )
-                smc_adj(i,l) = max( 0.001/dz(l), smc_adj(i,l) )
-              enddo
-           endif
-          enddo
-        endif
-
-    case default 
-        print *, 'FATAL ERROR: unrecognised LSM,', lsm
-        call mpi_abort(mpi_comm_world, 10, ierr)
-    end select
-
-    write(*,'(a,i2)') 'statistics of grids number processed for rank : ', myrank 
-    write(*,'(a,i8)') ' soil grid total', lensfc
-    write(*,'(a,i8)') ' soil grid cells with slc update', n_slc
-    write(*,'(a,i8)') ' soil grid cells with stc update', n_stc
+    if (print_debug) then 
+      write(*,'(a,i2)') 'statistics of grids number processed for rank : ', myrank 
+      write(*,'(a,i8)') ' soil grid total', lensfc
+      write(*,'(a,i8)') ' soil grid cells with slc update', n_slc
+      write(*,'(a,i8)') ' soil grid cells with stc update', n_stc
+    endif
 
 end subroutine apply_land_da_adjustments_soil
 

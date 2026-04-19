@@ -27,6 +27,6 @@ sflx_snippet.o: sflx_snippet.f90
 
 install:
 	-cp -p $(CMD) ../../../install/bin/
-#clean:
-#	-rm -f $(OBJS) *.mod $(CMD)
+clean:
+	-rm -f $(OBJS) *.mod #$(CMD)
 

@@ -36,7 +36,7 @@ program apply_incr_noahmp_soil
  ! index to map between tile and vector space 
  integer, allocatable          :: tile2vector(:,:) 
 
- integer :: ierr, irank, nprocs, myrank, lunit, ncid, n
+ integer :: ierr, irank, nprocs, myrank, lunit, ncid, n, nn
  integer :: ntiles, ens_size, ens_mem, tile_num
  character(len=3) :: ens_str
  logical :: file_exists
@@ -54,13 +54,16 @@ program apply_incr_noahmp_soil
  double precision   :: fice_threshold, lfrac_threshold
 
  integer            :: lsoil, lsoil_incr, isot, ivegsrc
- integer            :: veg_type_landice, lsm
- character(len=256) :: inc_prefix
+ integer            :: veg_type_landice   !, lsm
+ character(len=256) :: inc_prefix, stype_prefix
+ double precision, allocatable :: styper(:,:)
+ logical                       :: upd_stc
+ logical                       :: upd_slc
  !TODO: This is hard-coded in noahmpdrv
  real(kind=4)       :: zsoil(4) = (/ -0.1, -0.4, -1.0, -2.0 /)   
 
  namelist /noahmp_soil/ date_str, hour_str, res, rst_path, inc_path, orog_path, otype, ntiles, ens_size, &
-                        print_summary, print_debug, lsoil_incr, inc_prefix            
+                        print_summary, print_debug, lsoil_incr, inc_prefix, stype_prefix, upd_stc, upd_slc            
 
     call mpi_init(ierr)
     call mpi_comm_size(mpi_comm_world, nprocs, ierr)
@@ -76,14 +79,17 @@ program apply_incr_noahmp_soil
     print_summary = .true.
     print_debug = .false.
     lsoil_incr = 2
+    upd_stc = .false.
+    upd_slc = .false.
     inc_prefix = ""
+    !stype_prefix = "C96.mx100.soil_type"
     
     ! hard coded defaults--unlikely to change
     frac_grid = .true.
     fice_threshold=0.0
     lfrac_threshold=0.0001
     veg_type_landice = 15
-    lsm  = 2      ! this code only applies to noahmp
+    !lsm  = 2      ! this code only applies to noahmp
     lsoil = 4     ! zsoil is hard-coded for 4 layers
     ivegsrc = 1   ! The NOAHMP LSM expects that the ivegsrc physics parameter is 1
     isot = 1      ! Noahmp expects 1
@@ -105,6 +111,8 @@ program apply_incr_noahmp_soil
         call mpi_abort(mpi_comm_world, 10)  
     end if
 
+    allocate(styper(res, res))
+
     do irank=myrank, ntiles*ens_size - 1, nprocs
         ens_mem = irank/ntiles + 1            !ensemble member
         tile_num = MOD(irank, ntiles) + 1      !tile number
@@ -122,7 +130,7 @@ program apply_incr_noahmp_soil
         
         ! Calculate MAPPING INDEX based on land fraction
         call get_fv3_mapping_lfrac(tile_num, rst_path_full, date_str, hour_str, res, &
-             orog_path, otype, frac_grid, lfrac_threshold, fice_threshold, len_land_vec, tile2vector)
+             orog_path,otype,frac_grid,lfrac_threshold,fice_threshold,len_land_vec,tile2vector,stype_prefix,styper)
 
         ! SET-UP THE NOAH-MP STATE  AND INCREMENT        
         ! The allocations are inside the loop because different ensemble members could have different len_land_vec
@@ -141,18 +149,22 @@ program apply_incr_noahmp_soil
         allocate(noahmp_state%swe             (len_land_vec))
         allocate(noahmp_state%vtype           (len_land_vec))
         allocate(noahmp_state%stype           (len_land_vec))
-        
+       
+        ! map soil types
+        do nn=1,len_land_vec
+            noahmp_state%stype = nint(styper(tile2vector(nn,1), tile2vector(nn,2)))
+        enddo
+
         ! READ RESTART FILE 
         write(tilech, '(i1.1)') (tile_num)
         restart_file = trim(rst_path_full)//"/"//date_str//"."//hour_str//"0000.sfc_data.tile"//tilech//".nc"
 
-        call   read_fv3_restart(trim(restart_file), res, ncid, &         
-                    len_land_vec, tile2vector, noahmp_state, lsoil)
+        call read_fv3_restart(trim(restart_file), res, ncid, len_land_vec, tile2vector, noahmp_state, lsoil)
         noahmp_state%stc_bkg = noahmp_state%stc
 
         ! READ soil DA increments
-        call   read_fv3_increment(tile_num, inc_path_full, date_str, hour_str, res, &
-                    len_land_vec, tile2vector, inc_prefix,  noahmp_state, lsoil_incr)
+        call read_fv3_increment(tile_num, inc_path_full, date_str, hour_str, res, &
+                    len_land_vec, tile2vector, inc_prefix, noahmp_state, lsoil_incr, upd_stc, upd_slc)
         
         call calculate_landinc_mask(noahmp_state%swe,noahmp_state%vtype,noahmp_state%stype,&
                 len_land_vec, veg_type_landice, noahmp_state%soilsnow_tile)                ! soilsnow_fg_tile
@@ -160,15 +172,15 @@ program apply_incr_noahmp_soil
         call add_increment_soil(lsoil_incr,noahmp_state%stc_inc,noahmp_state%slc_inc, &
                noahmp_state%stc,noahmp_state%smc,noahmp_state%slc,&
                noahmp_state%stc_updated,noahmp_state%slc_updated,noahmp_state%soilsnow_tile,noahmp_state%soilsnow_tile,&
-               len_land_vec,lsoil,lsm,myrank)
+               len_land_vec,lsoil,myrank, upd_stc, upd_slc, print_summary, print_debug)
         
        !call calculate_landinc_mask(noahmp_state%swe,noahmp_state%vtype,noahmp_state%stype,&
        !         len_land_vec, veg_type_landice, noahmp_state%soilsnow_tile)
 
-        call apply_land_da_adjustments_soil(lsoil_incr, lsm, isot, ivegsrc, len_land_vec, &
+        call apply_land_da_adjustments_soil(lsoil_incr, isot, ivegsrc, len_land_vec, &
                  lsoil, noahmp_state%stype, noahmp_state%soilsnow_tile,noahmp_state%stc_bkg, &
                  noahmp_state%stc,noahmp_state%smc,noahmp_state%slc, &
-                 noahmp_state%stc_updated,noahmp_state%slc_updated, zsoil)
+                 noahmp_state%stc_updated,noahmp_state%slc_updated, zsoil, upd_stc, upd_slc, myrank, print_summary, print_debug)
             
         ! WRITE OUT ADJUSTED RESTART
         call write_fv3_restart(trim(restart_file),noahmp_state,res,ncid,len_land_vec,tile2vector,lsoil) 
@@ -197,6 +209,8 @@ program apply_incr_noahmp_soil
         deallocate(noahmp_state%stype             )
 
     enddo
+
+    deallocate(styper)
 
     if (myrank==0) print*, "apply_incr_noahmp_soil finishing"
     call mpi_finalize(ierr)
@@ -239,7 +253,7 @@ program apply_incr_noahmp_soil
 !--------------------------------------------------------------
 
  subroutine get_fv3_mapping_lfrac(tile_num, rst_path, date_str, hour_str, res, & 
-            orog_path, otype, fice_grid, lfrac_thold, fice_fhold, len_land_vec, tile2vector)
+            orog_path, otype, fice_grid, lfrac_thold, fice_fhold, len_land_vec, tile2vector,stype_prefix,styper)
 
  implicit none 
 
@@ -249,12 +263,13 @@ program apply_incr_noahmp_soil
  character(len=*), intent(in) :: rst_path
  character(len=8), intent(in) :: date_str 
  character(len=2), intent(in) :: hour_str 
- character(len=*), intent(in)   :: orog_path
+ character(len=*), intent(in)   :: orog_path, stype_prefix
  character(len=20), intent(in)  :: otype
  logical, intent(in)            :: fice_grid
  double precision, intent(in)      :: lfrac_thold, fice_fhold
  integer, intent(out)              :: len_land_vec
  integer, allocatable, intent(out) :: tile2vector(:,:)
+ double precision, intent(out)     :: styper(res,res) 
 
  character(len=512) :: restart_file, filename
  character(len=1)   :: rankch
@@ -305,7 +320,41 @@ program apply_incr_noahmp_soil
     ! close file 
     ierr=nf90_close(ncid)
     call netcdf_err(ierr, 'closing file: '//trim(filename) )
-    
+
+    ! read soil type 
+    filename =trim(orog_path)//"/sfc/"//trim(stype_prefix)//".tile"//rankch//".nc"
+
+    inquire(file=trim(filename), exist=file_exists)
+
+    if (.not. file_exists) then
+            print *, 'filename does not exist, ', &
+                    trim(filename) , ' exiting'
+            call mpi_abort(mpi_comm_world, 10)
+    endif
+
+    ierr=nf90_open(trim(filename),nf90_nowrite,ncid)
+    call netcdf_err(ierr, 'opening file: '//trim(filename) )
+
+    ! CHECK DIMENSIONS
+    ierr=nf90_inq_dimid(ncid, 'nx', id_dim)
+    call netcdf_err(ierr, 'reading nx id from '//trim(filename) )
+    ierr=nf90_inquire_dimension(ncid,id_dim,len=fres)
+    call netcdf_err(ierr, 'reading nx from '//trim(filename) )
+
+    if ( fres /= res) then
+       print*,'fatal error: dimensions wrong in file '//trim(filename)
+       call mpi_abort(mpi_comm_world, ierr)
+    endif
+
+    ierr=nf90_inq_varid(ncid, "soil_type", id_var)
+    call netcdf_err(ierr, 'reading soil_type id' )
+    ierr=nf90_get_var(ncid, id_var, styper)
+    call netcdf_err(ierr, 'reading soil_type' )
+
+    ! close file
+    ierr=nf90_close(ncid)
+    call netcdf_err(ierr, 'closing file: '//trim(filename) )
+
     ! Use vtype to exclude glaciers
     ! OPEN FILE
     write(rankch, '(i1.1)') (tile_num)
@@ -344,6 +393,8 @@ program apply_incr_noahmp_soil
     ! close file
     ierr=nf90_close(ncid)
     call netcdf_err(ierr, 'closing file: '//trim(restart_file) )
+
+
 
     slmsk_lfrac = 0
     do i = 1, res
@@ -446,9 +497,9 @@ end subroutine get_fv3_mapping_lfrac
  include 'mpif.h'
 
  integer, intent(in) :: res, len_land_vec   !tile_num, 
- character(len=*), intent(in) :: restart_file  !rst_path
- integer, intent(in) :: tile2vector(len_land_vec,2)
- integer, intent(in) :: lsoil
+ character(len=*), intent(in) :: restart_file
+ integer, intent(in)  :: tile2vector(len_land_vec,2)
+ integer, intent(in)  :: lsoil
  integer, intent(out) :: ncid
  type(noahmp_type), intent(inout)  :: noahmp_state
 
@@ -496,10 +547,10 @@ end subroutine get_fv3_mapping_lfrac
     call read_nc_var2D(ncid, trim(restart_file), len_land_vec, res, tile2vector, 0, &
                         'vtype', vstyper)
     noahmp_state%vtype = nint(vstyper)
-
-    call read_nc_var2D(ncid, trim(restart_file), len_land_vec, res, tile2vector, 0, &
-                        'stype', vstyper)
-    noahmp_state%stype = nint(vstyper)
+    
+    !call read_nc_var2D(ncid, trim(restart_file), len_land_vec, res, tile2vector, 0, &
+    !                    'stype', vstyper)
+    !noahmp_state%stype = nint(vstyper)
 
 end subroutine read_fv3_restart
 
@@ -509,7 +560,7 @@ end subroutine read_fv3_restart
 !  file format is same as restart file
 !--------------------------------------------------------------
  subroutine read_fv3_increment(tile_num, inc_path, date_str, hour_str, res, & 
-                len_land_vec,tile2vector, inc_prefix, noahmp_state, lsoil_incr)
+                len_land_vec,tile2vector, inc_prefix, noahmp_state, lsoil_incr, upd_stc, upd_slc)
 
  implicit none 
 
@@ -522,6 +573,7 @@ end subroutine read_fv3_restart
  integer, intent(in) :: tile2vector(len_land_vec,2)
  type(noahmp_type), intent(inout)  :: noahmp_state
  character(len=*), intent(in)      :: inc_prefix
+ logical, intent(in)               :: upd_stc, upd_slc
 
  character(len=512) :: incr_file
  character(len=1) :: rankch
@@ -555,12 +607,14 @@ end subroutine read_fv3_restart
        print*,'fatal error: dimension fres ',fres, ' in '//trim(incr_file), ' not equal to res ',res
        call mpi_abort(mpi_comm_world, ierr)
     endif
-
-    call read_nc_var3D(ncid, trim(restart_file), len_land_vec, res, lsoil_incr,  tile2vector, &
+ 
+    noahmp_state%stc_inc = 0.0  !0 if no inc exists. TODO: need to do liau type "no update on 0"?
+    if (upd_stc) call read_nc_var3D(ncid, trim(incr_file), len_land_vec, res, lsoil_incr,  tile2vector, &
                         'stc   ', noahmp_state%stc_inc)
 
-    call read_nc_var3D(ncid, trim(restart_file), len_land_vec, res, lsoil_incr,  tile2vector, &
-                        'slc   ', noahmp_state%stc_inc)
+    noahmp_state%slc_inc = 0.0
+    if (upd_slc) call read_nc_var3D(ncid, trim(incr_file), len_land_vec, res, lsoil_incr,  tile2vector, &
+                        'slc   ', noahmp_state%slc_inc)
 
     ierr=nf90_close(ncid)
     call netcdf_err(ierr, 'closing file: '//trim(incr_file) )
