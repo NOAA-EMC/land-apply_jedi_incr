@@ -2,38 +2,44 @@ program apply_incr_noahmp_soil
 
  use netcdf
 
+ use soil_increments, only : add_increment_soil, calculate_landinc_mask, apply_land_da_adjustments_soil
+
  implicit none
 
  include 'mpif.h'
 
- type(noahmp_type)      :: noahmp_state
 
- integer :: res, len_land_vec 
+ type noahmp_type
+   double precision, allocatable :: stc_bkg     (:,:)
+   double precision, allocatable :: stc         (:,:)
+   double precision, allocatable :: smc         (:,:)
+   double precision, allocatable :: slc         (:,:)
+   double precision, allocatable :: stc_inc     (:,:)
+   double precision, allocatable :: slc_inc     (:,:)
+   !double precision, allocatable :: smc_inc     (:,:)
+   integer, allocatable          :: stc_updated        (:)
+   integer, allocatable          :: slc_updated        (:)
+   integer, allocatable          :: soilsnow_tile      (:)
+   !integer, allocatable          :: soilsnow_fg_tile   (:)
+   !double precision, allocatable :: land_frac          (:)
+   double precision, allocatable :: swe                (:)
+   integer, allocatable          :: vtype              (:)
+   integer, allocatable          :: stype              (:)
+ end type noahmp_type 
+
+ type(noahmp_type)               :: noahmp_state
+
+ integer          :: res, len_land_vec 
  character(len=8) :: date_str 
  character(len=2) :: hour_str
- logical :: frac_grid
 
  ! index to map between tile and vector space 
- integer, allocatable :: tile2vector(:,:) 
- double precision, allocatable :: increment(:) 
- double precision, allocatable :: swe_back(:) 
- double precision, allocatable :: snow_depth_back(:) 
+ integer, allocatable          :: tile2vector(:,:) 
 
  integer :: ierr, irank, nprocs, myrank, lunit, ncid, n
  integer :: ntiles, ens_size, ens_mem, tile_num
  character(len=3) :: ens_str
  logical :: file_exists
-
- ! restart variables that apply to full grid cell 
- ! (cf those that are land only)
- type grid_type
-     double precision, allocatable :: land_frac          (:)
-     double precision, allocatable :: swe                (:)
-     double precision, allocatable :: snow_depth         (:)
-     character(len=10)  :: name_snow_depth
-     character(len=10)  :: name_swe
- endtype 
- type(grid_type) :: grid_state
 
  character(len=512) :: orog_path, rst_path_full, inc_path_full
  character(len=256) :: rst_path, inc_path
@@ -43,66 +49,47 @@ program apply_incr_noahmp_soil
  character(len=1)   :: tilech
  character(len=512) :: ioerrmsg
 
- double precision   :: noincr_threshold
- logical            :: print_summary, print_debug, truncate
- 
- double precision   :: snd_threshold=0.0001, swe_threshold=0.00001
+ logical            :: print_summary, print_debug, frac_grid
 
  double precision   :: fice_threshold, lfrac_threshold
 
+ integer            :: lsoil, lsoil_incr, isot, ivegsrc
+ integer            :: veg_type_landice, lsm
+ character(len=256) :: inc_prefix
+ !TODO: This is hard-coded in noahmpdrv
+ real(kind=4)       :: zsoil(4) = (/ -0.1, -0.4, -1.0, -2.0 /)   
 
- !****** adding for soil
- ! for add_soil_inc() subroutine
- 
- integer :: lsoil_incr, lensfc, lsoil, myrank, lsm
-
- real ;intent(in)                   :: stcinc(lensfc,lsoil)
- real (in)                   :: slcinc(lensfc,lsoil)
- integer, intent(in)      :: soilsnow_tile(lensfc), soilsnow_fg_tile(lensfc)
- 
- real, intent(inout)      :: stc_state(lensfc, lsoil)
- real, intent(inout)      :: slc_state(lensfc, lsoil)
- real, intent(inout)      :: smc_state(lensfc, lsoil)
- integer, intent(out)     :: stc_updated(lensfc), slc_updated(lensfc)
-
-
-! for soil adjustment 
-integer, intent(in)           :: lsoil_incr, lsm, lensfc, lsoil, isot, ivegsrc
-    real, intent(in)              :: rsoiltype(lensfc) ! soil types, as real
-    integer, intent(in)           :: mask(lensfc)
-    real, intent(in)              :: stc_bck(lensfc, lsoil)
-    integer, intent(in)           :: stc_updated(lensfc), slc_updated(lensfc)
-    real, intent(inout)           :: smc_adj(lensfc,lsoil), slc_adj(lensfc,lsoil) 
-    real, intent(inout)           :: stc_adj(lensfc, lsoil)
-    real(kind=4), intent(in)      :: zsoil(lsoil)
-
-
-             
-
- namelist /noahmp_snow/ date_str, hour_str, res, frac_grid, rst_path, inc_path, orog_path, otype, ntiles, ens_size, &
-                        noincr_threshold, print_summary, print_debug, truncate, fice_threshold, lfrac_threshold
+ namelist /noahmp_soil/ date_str, hour_str, res, rst_path, inc_path, orog_path, otype, ntiles, ens_size, &
+                        print_summary, print_debug, lsoil_incr, inc_prefix            
 
     call mpi_init(ierr)
     call mpi_comm_size(mpi_comm_world, nprocs, ierr)
     call mpi_comm_rank(mpi_comm_world, myrank, ierr)
 
-    if (myrank==0) print*, "starting apply_incr_noahmp_snow program on ", nprocs, " procs"
+    if (myrank==0) print*, "starting apply_incr_noahmp_soil program on ", nprocs, " procs"
 
     ! SET NAMELIST DEFAULTS
-    frac_grid = .false.
     rst_path = './'
     inc_path = './'
     ntiles = 6
     ens_size = 1
-    noincr_threshold = 999999999.9
     print_summary = .true.
     print_debug = .false.
-    truncate = .false.
+    lsoil_incr = 2
+    inc_prefix = ""
+    
+    ! hard coded defaults--unlikely to change
+    frac_grid = .true.
     fice_threshold=0.0
     lfrac_threshold=0.0001
+    veg_type_landice = 15
+    lsm  = 2      ! this code only applies to noahmp
+    lsoil = 4     ! zsoil is hard-coded for 4 layers
+    ivegsrc = 1   ! The NOAHMP LSM expects that the ivegsrc physics parameter is 1
+    isot = 1      ! Noahmp expects 1
 
     ! READ NAMELIST 
-    inquire (file='apply_incr_nml', exist=file_exists) 
+     inquire (file='apply_incr_nml', exist=file_exists) 
 
     if (.not. file_exists) then
         write (6, *) 'ERROR: apply_incr_nml does not exist'
@@ -110,26 +97,13 @@ integer, intent(in)           :: lsoil_incr, lsm, lensfc, lsoil, isot, ivegsrc
     end if
 
     open (action='read', file='apply_incr_nml', iostat=ierr, newunit=lunit, iomsg=ioerrmsg)
-    read (nml=noahmp_snow, iostat=ierr, unit=lunit)
+    read (nml=noahmp_soil, iostat=ierr, unit=lunit)
     close (lunit)
     if (ierr /= 0) then
         print*, "Error code from namelist read", ierr
         write(6,*) trim(ioerrmsg)         
         call mpi_abort(mpi_comm_world, 10)  
     end if
-
-    ! SET VARIABLE NAMES FOR SNOW OVER LAND AND GRID
-    if (frac_grid) then 
-        noahmp_state%name_snow_depth =  'snodl     '
-        noahmp_state%name_swe =         'weasdl    '
-        grid_state%name_snow_depth =    'snwdph    '
-        grid_state%name_swe =           'sheleg    '
-    else
-        noahmp_state%name_snow_depth =  'snwdph    '
-        noahmp_state%name_swe =         'sheleg    '
-        grid_state%name_snow_depth =    'snwdph    '
-        grid_state%name_swe =           'sheleg    '
-    endif
 
     do irank=myrank, ntiles*ens_size - 1, nprocs
         ens_mem = irank/ntiles + 1            !ensemble member
@@ -152,89 +126,53 @@ integer, intent(in)           :: lsoil_incr, lsm, lensfc, lsoil, isot, ivegsrc
 
         ! SET-UP THE NOAH-MP STATE  AND INCREMENT        
         ! The allocations are inside the loop because different ensemble members could have different len_land_vec
-        allocate(noahmp_state%swe                (len_land_vec)) ! values over land only
-        allocate(noahmp_state%snow_depth         (len_land_vec)) ! values over land only 
-        allocate(noahmp_state%active_snow_layers (len_land_vec)) 
-        allocate(noahmp_state%swe_previous       (len_land_vec))
-        allocate(noahmp_state%snow_soil_interface(len_land_vec,7))
-        allocate(noahmp_state%temperature_snow   (len_land_vec,3))
-        allocate(noahmp_state%snow_ice_layer     (len_land_vec,3))
-        allocate(noahmp_state%snow_liq_layer     (len_land_vec,3))
-        allocate(noahmp_state%temperature_soil   (len_land_vec))
-        allocate(increment   (len_land_vec)) ! increment to snow depth over land
-
-        if (frac_grid) then
-            allocate(grid_state%land_frac          (len_land_vec)) 
-            allocate(grid_state%swe                (len_land_vec)) ! values over full grid
-            allocate(grid_state%snow_depth         (len_land_vec)) ! values over full grid
-            allocate(swe_back                      (len_land_vec)) ! save background 
-            allocate(snow_depth_back               (len_land_vec)) !
-        endif
-
+        allocate(noahmp_state%stc_bkg         (len_land_vec, lsoil)) 
+        allocate(noahmp_state%stc             (len_land_vec, lsoil))
+        allocate(noahmp_state%smc             (len_land_vec, lsoil))  
+        allocate(noahmp_state%slc             (len_land_vec, lsoil)) 
+        allocate(noahmp_state%stc_inc         (len_land_vec, lsoil_incr))
+        allocate(noahmp_state%slc_inc         (len_land_vec, lsoil_incr))
+        !allocate(noahmp_state%smc_inc         (len_land_vec, lsoil_incr))
+        allocate(noahmp_state%stc_updated     (len_land_vec))
+        allocate(noahmp_state%slc_updated     (len_land_vec))
+        allocate(noahmp_state%soilsnow_tile   (len_land_vec))
+        !allocate(noahmp_state%soilsnow_fg_tile(len_land_vec))
+        !allocate(noahmp_state%land_frac       (len_land_vec)) 
+        allocate(noahmp_state%swe             (len_land_vec))
+        allocate(noahmp_state%vtype           (len_land_vec))
+        allocate(noahmp_state%stype           (len_land_vec))
+        
         ! READ RESTART FILE 
         write(tilech, '(i1.1)') (tile_num)
         restart_file = trim(rst_path_full)//"/"//date_str//"."//hour_str//"0000.sfc_data.tile"//tilech//".nc"
 
         call   read_fv3_restart(trim(restart_file), res, ncid, &         
-                    len_land_vec, tile2vector, frac_grid, noahmp_state, grid_state)
+                    len_land_vec, tile2vector, noahmp_state, lsoil)
+        noahmp_state%stc_bkg = noahmp_state%stc
 
-        ! READ SNOW DEPTH INCREMENT
+        ! READ soil DA increments
         call   read_fv3_increment(tile_num, inc_path_full, date_str, hour_str, res, &
-                    len_land_vec, tile2vector, noahmp_state%name_snow_depth, truncate, increment)
-    
-        if (frac_grid) then ! save background
-            swe_back = noahmp_state%swe
-            snow_depth_back = noahmp_state%snow_depth
-        endif 
-
-
-        call add_increment_soil(lsoil_incr,stcinc,slcinc,stc_state,smc_state,slc_state,stc_updated,&
-              slc_updated,soilsnow_tile,soilsnow_fg_tile,lensfc,lsoil,lsm,myrank)
-
-
-        call  apply_land_da_adjustments_soil(lsoil_incr, lsm, isot, ivegsrc,lensfc, &
-                 lsoil, rsoiltype, mask, stc_bck, stc_adj, smc_adj, slc_adj, &
-                 stc_updated, slc_updated, zsoil)
-    
-
-
-              
-        ! ADJUST THE SNOW STATES OVER LAND
-        !TODO: return and check error code from this call (for now assume it is well handled inside function)
-        call UpdateAllLayers(len_land_vec, increment, noahmp_state, noincr_threshold, print_summary, print_debug)
-
-        ! IF FRAC GRID, ADJUST SNOW STATES OVER GRID CELL
-        if (frac_grid) then
-
-            ! get the land frac 
-            call  read_fv3_orog(tile_num, res, orog_path, otype, len_land_vec, tile2vector, & 
-                    grid_state)
-
-            do n=1,len_land_vec 
-                grid_state%swe(n) = grid_state%swe(n) + & 
-                                    grid_state%land_frac(n)* ( noahmp_state%swe(n) - swe_back(n)) 
-                grid_state%snow_depth(n) = grid_state%snow_depth(n) + & 
-                                    grid_state%land_frac(n)* ( noahmp_state%snow_depth(n) - snow_depth_back(n)) 
-                ! check for negative values
-                if((grid_state%snow_depth(n) <=  snd_threshold) .or. (grid_state%swe(n) <=  swe_threshold)) then
-                    noahmp_state%swe                (n)   = 0.0
-                    noahmp_state%snow_depth         (n)   = 0.0
-                    noahmp_state%active_snow_layers (n)   = 0.0
-                    noahmp_state%swe_previous       (n)   = 0.0
-                    noahmp_state%snow_soil_interface(n,:) = (/0.0,0.0,0.0,-0.1,-0.4,-1.0,-2.0/)
-                    noahmp_state%temperature_snow   (n,:) = 0.0
-                    noahmp_state%snow_ice_layer     (n,:) = 0.0
-                    noahmp_state%snow_liq_layer     (n,:) = 0.0
-                    grid_state%snow_depth           (n)   = 0.0
-                    grid_state%swe                  (n)   = 0.0
-                endif
-            enddo
-        endif
+                    len_land_vec, tile2vector, inc_prefix,  noahmp_state, lsoil_incr)
         
-        ! WRITE OUT ADJUSTED RESTART
-        call   write_fv3_restart(trim(restart_file), noahmp_state, grid_state, res, ncid, len_land_vec, & 
-                    frac_grid, tile2vector) 
+        call calculate_landinc_mask(noahmp_state%swe,noahmp_state%vtype,noahmp_state%stype,&
+                len_land_vec, veg_type_landice, noahmp_state%soilsnow_tile)                ! soilsnow_fg_tile
 
+        call add_increment_soil(lsoil_incr,noahmp_state%stc_inc,noahmp_state%slc_inc, &
+               noahmp_state%stc,noahmp_state%smc,noahmp_state%slc,&
+               noahmp_state%stc_updated,noahmp_state%slc_updated,noahmp_state%soilsnow_tile,noahmp_state%soilsnow_tile,&
+               len_land_vec,lsoil,lsm,myrank)
+        
+       !call calculate_landinc_mask(noahmp_state%swe,noahmp_state%vtype,noahmp_state%stype,&
+       !         len_land_vec, veg_type_landice, noahmp_state%soilsnow_tile)
+
+        call apply_land_da_adjustments_soil(lsoil_incr, lsm, isot, ivegsrc, len_land_vec, &
+                 lsoil, noahmp_state%stype, noahmp_state%soilsnow_tile,noahmp_state%stc_bkg, &
+                 noahmp_state%stc,noahmp_state%smc,noahmp_state%slc, &
+                 noahmp_state%stc_updated,noahmp_state%slc_updated, zsoil)
+            
+        ! WRITE OUT ADJUSTED RESTART
+        call write_fv3_restart(trim(restart_file),noahmp_state,res,ncid,len_land_vec,tile2vector,lsoil) 
+        
         ! CLOSE RESTART FILE 
         ierr = nf90_close(ncid)
         call netcdf_err( ierr, "closing restart file "//trim(restart_file) )
@@ -242,28 +180,25 @@ integer, intent(in)           :: lsoil_incr, lsm, lensfc, lsoil, isot, ivegsrc
         ! Deallocate. These are required incase a single process loops through multiple tiles with different mapping     
         if (allocated(tile2vector)) deallocate(tile2vector)   
                 
-        deallocate(noahmp_state%swe) ! values over land only
-        deallocate(noahmp_state%snow_depth) ! values over land only 
-        deallocate(noahmp_state%active_snow_layers) 
-        deallocate(noahmp_state%swe_previous)
-        deallocate(noahmp_state%snow_soil_interface)
-        deallocate(noahmp_state%temperature_snow)
-        deallocate(noahmp_state%snow_ice_layer)
-        deallocate(noahmp_state%snow_liq_layer)
-        deallocate(noahmp_state%temperature_soil)
-        deallocate(increment) ! increment to snow depth over land
-
-        if (frac_grid) then
-            deallocate(grid_state%land_frac) 
-            deallocate(grid_state%swe) ! values over full grid
-            deallocate(grid_state%snow_depth) ! values over full grid
-            deallocate(swe_back) ! save background 
-            deallocate(snow_depth_back) !
-        endif
+        deallocate(noahmp_state%stc_bkg           )
+        deallocate(noahmp_state%stc               )
+        deallocate(noahmp_state%smc               )
+        deallocate(noahmp_state%slc               )
+        deallocate(noahmp_state%stc_inc           )
+        deallocate(noahmp_state%slc_inc           )
+        !deallocate(noahmp_state%smc_inc          )
+        deallocate(noahmp_state%stc_updated       )
+        deallocate(noahmp_state%slc_updated       )
+        deallocate(noahmp_state%soilsnow_tile     )
+        !deallocate(noahmp_state%soilsnow_fg_tile )
+        !deallocate(noahmp_state%land_frac        )
+        deallocate(noahmp_state%swe               )
+        deallocate(noahmp_state%vtype             )
+        deallocate(noahmp_state%stype             )
 
     enddo
 
-    if (myrank==0) print*, "apply_incr_noahmp_snow finishing"
+    if (myrank==0) print*, "apply_incr_noahmp_soil finishing"
     call mpi_finalize(ierr)
 
  contains 
@@ -504,7 +439,7 @@ end subroutine get_fv3_mapping_lfrac
 ! file is opened as read/write and remains open
 !--------------------------------------------------------------
  subroutine read_fv3_restart(restart_file, res, ncid, & 
-                len_land_vec,tile2vector, frac_grid, noahmp_state, grid_state)
+                len_land_vec,tile2vector, noahmp_state, lsoil)
 
  implicit none 
 
@@ -513,15 +448,14 @@ end subroutine get_fv3_mapping_lfrac
  integer, intent(in) :: res, len_land_vec   !tile_num, 
  character(len=*), intent(in) :: restart_file  !rst_path
  integer, intent(in) :: tile2vector(len_land_vec,2)
- logical, intent(in) :: frac_grid
-
+ integer, intent(in) :: lsoil
  integer, intent(out) :: ncid
  type(noahmp_type), intent(inout)  :: noahmp_state
- type(grid_type), intent(inout)  :: grid_state
 
  logical :: file_exists
  integer :: ierr, id_dim, fres
  integer :: nn
+ double precision :: vstyper(len_land_vec)
 
     ! OPEN FILE
     inquire(file=trim(restart_file), exist=file_exists)
@@ -546,144 +480,59 @@ end subroutine get_fv3_mapping_lfrac
        call mpi_abort(mpi_comm_world, ierr)
     endif
 
-   ! read swe over land (file name: sheleg, vert dim 1) 
-    ! this call has file name added for inspection. 
-    !In case of failure, filename has all info about proc rank, ens member, and tile number
+  
     call read_nc_var2D(ncid, trim(restart_file), len_land_vec, res, tile2vector, 0, & 
-                        noahmp_state%name_swe, noahmp_state%swe)
+                        'weasdl', noahmp_state%swe)
+    
+    call read_nc_var3D(ncid, trim(restart_file), len_land_vec, res, lsoil,  tile2vector, &
+                        'stc', noahmp_state%stc)
 
-    ! read snow_depth over land (file name: snwdph, vert dim 1)
-    call read_nc_var2D(ncid, trim(restart_file), len_land_vec, res, tile2vector, 0, & 
-                        noahmp_state%name_snow_depth, noahmp_state%snow_depth)
+    call read_nc_var3D(ncid, trim(restart_file), len_land_vec, res, lsoil, tile2vector, & 
+                        'smc', noahmp_state%smc)
+ 
+    call read_nc_var3D(ncid, trim(restart_file), len_land_vec, res, lsoil, tile2vector, & 
+                        'slc', noahmp_state%slc)
 
-   if (frac_grid) then 
-       ! read swe over grid cell  (file name: sheleg, vert dim 1) 
-        call read_nc_var2D(ncid, trim(restart_file), len_land_vec, res, tile2vector, 0, & 
-                            grid_state%name_swe, grid_state%swe)
+    call read_nc_var2D(ncid, trim(restart_file), len_land_vec, res, tile2vector, 0, &
+                        'vtype', vstyper)
+    noahmp_state%vtype = nint(vstyper)
 
-        ! read snow_depth  over grid cell (file name: snwdph, vert dim 1)
-        call read_nc_var2D(ncid, trim(restart_file), len_land_vec, res, tile2vector, 0, & 
-                            grid_state%name_snow_depth, grid_state%snow_depth)
-    endif
-
-    ! read active_snow_layers (file name: snowxy, vert dim: 1) 
-    call read_nc_var2D(ncid, trim(restart_file), len_land_vec, res, tile2vector, 0, & 
-                        'snowxy    ', noahmp_state%active_snow_layers)
-
-    ! read swe_previous (file name: sneqvoxy, vert dim: 1) 
-    call read_nc_var2D(ncid, trim(restart_file), len_land_vec, res, tile2vector, 0, & 
-                        'sneqvoxy  ', noahmp_state%swe_previous)
-
-    ! read snow_soil_interface (file name: zsnsoxy, vert dim: 7) 
-    call read_nc_var3D(ncid, trim(restart_file), len_land_vec, res, 7,  tile2vector, & 
-                        'zsnsoxy   ', noahmp_state%snow_soil_interface)
-
-    ! read temperature_snow (file name: tsnoxy, vert dim: 3) 
-    call read_nc_var3D(ncid, trim(restart_file), len_land_vec, res, 3, tile2vector, & 
-                        'tsnoxy    ', noahmp_state%temperature_snow)
-
-    ! read snow_ice_layer (file name:  snicexy, vert dim: 3) 
-    call read_nc_var3D(ncid, trim(restart_file), len_land_vec, res, 3, tile2vector, & 
-                        'snicexy    ', noahmp_state%snow_ice_layer)
-
-    ! read snow_liq_layer (file name: snliqxy, vert dim: 3) 
-    call read_nc_var3D(ncid, trim(restart_file), len_land_vec, res, 3, tile2vector, & 
-                        'snliqxy   ', noahmp_state%snow_liq_layer)
-
-    ! read temperature_soil (file name: stc, use layer 1 only, vert dim: 1) 
-    call read_nc_var2D(ncid, trim(restart_file), len_land_vec, res, tile2vector, 4, & 
-                        'stc       ', noahmp_state%temperature_soil)
+    call read_nc_var2D(ncid, trim(restart_file), len_land_vec, res, tile2vector, 0, &
+                        'stype', vstyper)
+    noahmp_state%stype = nint(vstyper)
 
 end subroutine read_fv3_restart
 
 
 !--------------------------------------------------------------
-! open fv3 orography file, and read in land fraction
-!--------------------------------------------------------------
- subroutine read_fv3_orog(tile_num, res, orog_path, otype, len_land_vec, tile2vector, & 
-                grid_state)
-
- implicit none 
-
- include 'mpif.h'
-
- integer, intent(in) :: tile_num, res, len_land_vec
- character(len=*), intent(in)    :: orog_path
- character(len=20), intent(in)   :: otype
- integer, intent(in) :: tile2vector(len_land_vec,2)
- type(grid_type), intent(inout) :: grid_state
-
- character(len=250) :: filename
- character(len=1) :: rankch
- logical :: file_exists
- integer :: ncid, id_dim, id_var, ierr, fres
-
-    ! OPEN FILE
-    write(rankch, '(i1.1)') (tile_num)
-    filename =trim(orog_path)//"/"//trim(otype)//".tile"//rankch//".nc"
-
-    inquire(file=trim(filename), exist=file_exists)
-
-    if (.not. file_exists) then
-            print *, 'filename does not exist, ', &
-                    trim(filename) , ' exiting'
-            call mpi_abort(mpi_comm_world, 10) 
-    endif
-
-    ierr=nf90_open(trim(filename),nf90_nowrite,ncid)
-    call netcdf_err(ierr, 'opening file: '//trim(filename) )
-
-    ! CHECK DIMENSIONS
-    ierr=nf90_inq_dimid(ncid, 'lon', id_dim)
-    call netcdf_err(ierr, 'reading lon id from '//trim(filename) )
-    ierr=nf90_inquire_dimension(ncid,id_dim,len=fres)
-    call netcdf_err(ierr, 'reading lon from '//trim(filename) )
-
-    if ( fres /= res) then
-       print*,'fatal error: dimensions wrong in file '//trim(filename)
-       call mpi_abort(mpi_comm_world, ierr)
-    endif
-
-   ! read land_frac over grid cell (file name: land_frac, vert dim 1) 
-    call read_nc_var2D(ncid, trim(filename), len_land_vec, res, tile2vector, 0, & 
-                        'land_frac  ', grid_state%land_frac)
-
-    ! close file 
-    ierr=nf90_close(ncid)
-    call netcdf_err(ierr, 'closing file: '//trim(filename) )
-
-end subroutine read_fv3_orog
-
-!--------------------------------------------------------------
-!  read in snow depth increment from jedi increment file
+!  read in soil increments from jedi increment file
 !  file format is same as restart file
 !--------------------------------------------------------------
  subroutine read_fv3_increment(tile_num, inc_path, date_str, hour_str, res, & 
-                len_land_vec,tile2vector, control_var, truncate, increment)
+                len_land_vec,tile2vector, inc_prefix, noahmp_state, lsoil_incr)
 
  implicit none 
 
  include 'mpif.h'
 
- integer, intent(in) :: tile_num, res, len_land_vec
+ integer, intent(in) :: tile_num, res, len_land_vec, lsoil_incr
  character(len=*), intent(in) :: inc_path
  character(len=8), intent(in) :: date_str 
  character(len=2), intent(in) :: hour_str 
  integer, intent(in) :: tile2vector(len_land_vec,2)
- character(len=10), intent(in)  :: control_var
- logical, intent(in) :: truncate
- double precision, intent(out) :: increment(len_land_vec)     ! snow depth increment
+ type(noahmp_type), intent(inout)  :: noahmp_state
+ character(len=*), intent(in)      :: inc_prefix
 
  character(len=512) :: incr_file
  character(len=1) :: rankch
  logical :: file_exists
  integer :: ierr 
  integer :: id_dim, id_var, fres, ncid
- integer :: nn
+ integer :: nn, nl
 
     ! OPEN FILE
     write(rankch, '(i1.1)') (tile_num)
-    incr_file = trim(inc_path)//"/"//"snowinc."//date_str//"."//hour_str//"0000.sfc_data.tile"//rankch//".nc"
+    incr_file = trim(inc_path)//"/"//trim(inc_prefix)//date_str//"."//hour_str//"0000.sfc_data.tile"//rankch//".nc"
 
     inquire(file=trim(incr_file), exist=file_exists)
 
@@ -707,15 +556,12 @@ end subroutine read_fv3_orog
        call mpi_abort(mpi_comm_world, ierr)
     endif
 
-    ! read snow_depth (file name: snwdph, vert dim 1)
-    call read_nc_var2D(ncid, trim(incr_file), len_land_vec, res, tile2vector, 0, & 
-                        control_var, increment)
-    ! Truncate increments if requested
-    if (truncate) then
-        do nn = 1, len_land_vec
-            increment(nn) = dble(nint(increment(nn) * 1.0d7)) / 1.0d7
-        end do
-    end if
+    call read_nc_var3D(ncid, trim(restart_file), len_land_vec, res, lsoil_incr,  tile2vector, &
+                        'stc   ', noahmp_state%stc_inc)
+
+    call read_nc_var3D(ncid, trim(restart_file), len_land_vec, res, lsoil_incr,  tile2vector, &
+                        'slc   ', noahmp_state%stc_inc)
+
     ierr=nf90_close(ncid)
     call netcdf_err(ierr, 'closing file: '//trim(incr_file) )
 
@@ -731,7 +577,7 @@ subroutine read_nc_var2D(ncid, file_name, len_land_vec, res, tile2vector, in3D_v
     integer, intent(in)             :: ncid, len_land_vec, res 
     ! file name added for inspection. In case of failure, filename has all info about proc rank, ens member, and tile number
     character(len=*), intent(in)    :: file_name  
-    character(len=10), intent(in)   :: var_name
+    character(len=*), intent(in)    :: var_name
     integer, intent(in)             :: tile2vector(len_land_vec,2)
     integer, intent(in)             :: in3D_vdim ! 0 - input is 2D, 
                                                  ! >0, gives dim of 3rd dimension
@@ -742,14 +588,14 @@ subroutine read_nc_var2D(ncid, file_name, len_land_vec, res, tile2vector, in3D_v
     integer          :: nn, ierr, id_var
 
     ierr=nf90_inq_varid(ncid, trim(var_name), id_var)
-    call netcdf_err(ierr, 'reading '//var_name//' id in '//trim(file_name) )
+    call netcdf_err(ierr, 'reading '//trim(var_name)//' id in '//trim(file_name) )
     if (in3D_vdim==0) then
         ierr=nf90_get_var(ncid, id_var, dummy2D)
-        call netcdf_err(ierr, 'reading '//var_name//' data in '//trim(file_name) )
+        call netcdf_err(ierr, 'reading '//trim(var_name)//' data in '//trim(file_name) )
     else  ! special case for reading in 3D variable, and retaining only 
           ! level 1
         ierr=nf90_get_var(ncid, id_var, dummy3D)
-        call netcdf_err(ierr, 'reading '//var_name//' data in '//trim(file_name) )
+        call netcdf_err(ierr, 'reading '//trim(var_name)//' data in '//trim(file_name) )
         dummy2D=dummy3D(:,:,1) 
     endif
 
@@ -768,7 +614,7 @@ subroutine read_nc_var3D(ncid, file_name, len_land_vec, res, vdim,  &
 
     integer, intent(in)             :: ncid, len_land_vec, res, vdim
     character(len=*), intent(in)    :: file_name
-    character(len=10), intent(in)   :: var_name
+    character(len=*), intent(in)    :: var_name
     integer, intent(in)             :: tile2vector(len_land_vec,2)
     double precision, intent(out)   :: data_vec(len_land_vec, vdim)
 
@@ -776,9 +622,9 @@ subroutine read_nc_var3D(ncid, file_name, len_land_vec, res, vdim,  &
     integer          :: nn, ierr, id_var
 
     ierr=nf90_inq_varid(ncid, trim(var_name), id_var)
-    call netcdf_err(ierr, 'reading '//var_name//' id in '//trim(file_name) )
+    call netcdf_err(ierr, 'reading '//trim(var_name)//' id in '//trim(file_name) )
     ierr=nf90_get_var(ncid, id_var, dummy3D)
-    call netcdf_err(ierr, 'reading '//var_name//' data in '//trim(file_name) )
+    call netcdf_err(ierr, 'reading '//trim(var_name)//' data in '//trim(file_name) )
 
     do nn=1,len_land_vec 
         data_vec(nn,:) = dummy3D(tile2vector(nn,1), tile2vector(nn,2), :) 
@@ -789,64 +635,24 @@ end subroutine read_nc_var3D
 !--------------------------------------------------------------
 ! write updated fields tofv3_restarts  open on ncid
 !--------------------------------------------------------------
- subroutine write_fv3_restart(file_name, noahmp_state, grid_state, res, ncid, len_land_vec, &
-                 frac_grid, tile2vector) 
+ subroutine write_fv3_restart(file_name, noahmp_state, res, ncid, len_land_vec, tile2vector, lsoil) 
 
  implicit none 
 
- integer, intent(in) :: ncid, res, len_land_vec
+ integer, intent(in) :: ncid, res, len_land_vec, lsoil
  character(len=*), intent(in)    :: file_name
  type(noahmp_type), intent(in) :: noahmp_state
- type(grid_type), intent(in) :: grid_state
- logical, intent(in) :: frac_grid
  integer, intent(in) :: tile2vector(len_land_vec,2)
  
-   ! write swe over land (file name: sheleg, vert dim 1) 
-    call write_nc_var2D(ncid, trim(file_name), len_land_vec, res, tile2vector, 0, & 
-                        noahmp_state%name_swe, noahmp_state%swe)
 
-    ! write snow_depth over land (file name: snwdph, vert dim 1)
-    call write_nc_var2D(ncid, trim(file_name), len_land_vec, res, tile2vector, 0, & 
-                        noahmp_state%name_snow_depth, noahmp_state%snow_depth)
+    call write_nc_var3D(ncid, trim(file_name), len_land_vec, res, lsoil, tile2vector, & 
+                        'stc', noahmp_state%stc)
 
-    if (frac_grid) then
-       ! write swe over grid (file name: sheleg, vert dim 1) 
-        call write_nc_var2D(ncid, trim(file_name), len_land_vec, res, tile2vector, 0, & 
-                            grid_state%name_swe, grid_state%swe)
+    call write_nc_var3D(ncid, trim(file_name), len_land_vec, res, lsoil, tile2vector, & 
+                        'smc', noahmp_state%smc)
 
-        ! write snow_depth over grid (file name: snwdph, vert dim 1)
-        call write_nc_var2D(ncid, trim(file_name), len_land_vec, res, tile2vector, 0, & 
-                            grid_state%name_snow_depth, grid_state%snow_depth)
-    endif 
-
-    ! write active_snow_layers (file name: snowxy, vert dim: 1) 
-    call write_nc_var2D(ncid, trim(file_name), len_land_vec, res, tile2vector, 0, & 
-                        'snowxy    ', noahmp_state%active_snow_layers)
-
-    ! write swe_previous (file name: sneqvoxy, vert dim: 1) 
-    call write_nc_var2D(ncid, trim(file_name), len_land_vec, res, tile2vector, 0, & 
-                        'sneqvoxy  ', noahmp_state%swe_previous)
-
-    ! write snow_soil_interface (file name: zsnsoxy, vert dim: 7) 
-    call write_nc_var3D(ncid, trim(file_name), len_land_vec, res, 7,  tile2vector, & 
-                        'zsnsoxy   ', noahmp_state%snow_soil_interface)
-
-    ! write temperature_snow (file name: tsnoxy, vert dim: 3) 
-    call write_nc_var3D(ncid, trim(file_name), len_land_vec, res, 3, tile2vector, & 
-                        'tsnoxy    ', noahmp_state%temperature_snow)
-
-    ! write snow_ice_layer (file name:  snicexy, vert dim: 3) 
-    call write_nc_var3D(ncid, trim(file_name), len_land_vec, res, 3, tile2vector, & 
-                        'snicexy    ', noahmp_state%snow_ice_layer)
-
-    ! write snow_liq_layer (file name: snliqxy, vert dim: 3) 
-    call write_nc_var3D(ncid, trim(file_name), len_land_vec, res, 3, tile2vector, & 
-                        'snliqxy   ', noahmp_state%snow_liq_layer)
-
-    ! write temperature_soil (file name: stc, use layer 1 only, vert dim: 1) 
-    call write_nc_var2D(ncid, trim(file_name), len_land_vec, res, tile2vector, 4, & 
-                        'stc       ', noahmp_state%temperature_soil)
-
+    call write_nc_var3D(ncid, trim(file_name), len_land_vec, res, lsoil, tile2vector, &
+                        'slc', noahmp_state%slc)
 
  end subroutine write_fv3_restart
 
@@ -859,7 +665,7 @@ subroutine write_nc_var2D(ncid, file_name, len_land_vec, res, tile2vector,   &
 
     integer, intent(in)             :: ncid, len_land_vec, res
     character(len=*), intent(in)    :: file_name
-    character(len=10), intent(in)   :: var_name
+    character(len=*), intent(in)    :: var_name
     integer, intent(in)             :: tile2vector(len_land_vec,2)
     integer, intent(in)             :: in3D_vdim ! 0 - input is 2D, 
                                                  ! >0, gives dim of 3rd dimension
@@ -907,7 +713,7 @@ subroutine write_nc_var3D(ncid, file_name, len_land_vec, res, vdim, &
 
     integer, intent(in)             :: ncid, len_land_vec, res, vdim
     character(len=*), intent(in)    :: file_name
-    character(len=10), intent(in)   :: var_name
+    character(len=*), intent(in)    :: var_name
     integer, intent(in)             :: tile2vector(len_land_vec,2)
     double precision, intent(in)    :: data_vec(len_land_vec, vdim)
 
