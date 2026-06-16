@@ -4,7 +4,7 @@ set -x
 #-use standard module.
 #-----------------------------------------------------
 
-export FCMP=ftn    #ifort
+export FCMP=mpiifort #ftn    #ifort
 export INCS="-I${netcdf_fortran_ROOT}/include"          # netcdf modules does not 
 export FFLAGS="$INCS -O3 -fp-model precise -r8 -convert big_endian -traceback -g -diag-disable=10448"
 export LIBSM="-L${netcdf_fortran_ROOT}/lib -lnetcdff"
