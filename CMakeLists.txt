@@ -35,6 +35,8 @@ set( PUBLIC_LIBS
     OpenMP::OpenMP_Fortran
 )
 
+set( MODULE_DIR ${CMAKE_BINARY_DIR}/module )
+
 ################################################################################
 # jediincr_snow
 ################################################################################
@@ -52,6 +54,9 @@ ecbuild_add_library( TARGET   jediincr_snow
 target_link_libraries(jediincr_snow PUBLIC ${PUBLIC_LIBS})
 
 #target_compile_options(jediincr PRIVATE  -r8 -init=huge -cpp, -DCCPP=.false. )
+
+set_target_properties(jediincr_snow PROPERTIES Fortran_MODULE_DIRECTORY ${MODULE_DIR}/snow_inc)
+target_include_directories(jediincr_snow PUBLIC $<BUILD_INTERFACE:${MODULE_DIR}/snow_inc>)
 
 # jedi_incr_snow.exe
 set ( snow_exe_files ./sorc/apply_incr_noahmp_snow.f90 )
@@ -73,12 +78,15 @@ list( APPEND sorc_files_soilinc
 )
 
 ecbuild_add_library( TARGET          jediincr_soil
-                     SOURCES         ${sorc_files_snowinc}
+                     SOURCES         ${sorc_files_soilinc}
                      INSTALL_HEADERS LISTED
                      LINKER_LANGUAGE ${JEDIINCR_LINKER_LANGUAGE}
                     )
 
 target_link_libraries(jediincr_soil PUBLIC ${PUBLIC_LIBS})
+
+set_target_properties(jediincr_soil PROPERTIES Fortran_MODULE_DIRECTORY ${MODULE_DIR}/soil_inc)
+target_include_directories(jediincr_soil PUBLIC $<BUILD_INTERFACE:${MODULE_DIR}/soil_inc>)
 
 set( soil_exe_files ./sorc/apply_incr_noahmp_soil.f90 )
 
