@@ -42,7 +42,7 @@ set( MODULE_DIR ${CMAKE_BINARY_DIR}/module )
 ################################################################################
 
 list ( APPEND sorc_files_snowinc
-./sorc/NoahMPdisag_module.f90
+./sorc/snow/NoahMPdisag_module.f90
 )
 
 ecbuild_add_library( TARGET   jediincr_snow
@@ -59,7 +59,7 @@ set_target_properties(jediincr_snow PROPERTIES Fortran_MODULE_DIRECTORY ${MODULE
 target_include_directories(jediincr_snow PUBLIC $<BUILD_INTERFACE:${MODULE_DIR}/snow_inc>)
 
 # jedi_incr_snow.exe
-set ( snow_exe_files ./sorc/apply_incr_noahmp_snow.f90 )
+set ( snow_exe_files ./sorc/snow/apply_incr_noahmp_snow.f90 )
 
 ecbuild_add_executable( TARGET   apply_incr.exe
                         SOURCES  ${snow_exe_files}
@@ -72,9 +72,9 @@ ecbuild_add_executable( TARGET   apply_incr.exe
 ################################################################################
 
 list( APPEND sorc_files_soilinc
-    ./sorc/soil_increments.f90
-    ./sorc/set_soilveg_snippet.f90
-    ./sorc/sflx_snippet.f90
+    ./sorc/soil/soil_increments.f90
+    ./sorc/soil/set_soilveg_snippet.f90
+    ./sorc/soil/sflx_snippet.f90
 )
 
 ecbuild_add_library( TARGET          jediincr_soil
@@ -88,7 +88,7 @@ target_link_libraries(jediincr_soil PUBLIC ${PUBLIC_LIBS})
 set_target_properties(jediincr_soil PROPERTIES Fortran_MODULE_DIRECTORY ${MODULE_DIR}/soil_inc)
 target_include_directories(jediincr_soil PUBLIC $<BUILD_INTERFACE:${MODULE_DIR}/soil_inc>)
 
-set( soil_exe_files ./sorc/apply_incr_noahmp_soil.f90 )
+set( soil_exe_files ./sorc/soil/apply_incr_noahmp_soil.f90 )
 
 ecbuild_add_executable( TARGET          apply_soil_incr.x
                         SOURCES         ${soil_exe_files}
