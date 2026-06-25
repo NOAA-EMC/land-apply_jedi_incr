@@ -59,11 +59,12 @@ program apply_incr_noahmp_soil
  double precision, allocatable :: styper(:,:)
  logical                       :: upd_stc
  logical                       :: upd_slc
+ logical                       :: csg_increment   ! if true, read increments from cube sphere file instead of fv3 increment file. 
  !TODO: This is hard-coded in noahmpdrv
  real(kind=4)       :: zsoil(4) = (/ -0.1, -0.4, -1.0, -2.0 /)   
 
  namelist /noahmp_soil/ date_str, hour_str, res, rst_path, inc_path, orog_path, otype, ntiles, ens_size, &
-                        print_summary, print_debug, lsoil_incr, inc_prefix, stype_prefix, upd_stc, upd_slc            
+                        print_summary, print_debug, lsoil_incr, inc_prefix, stype_prefix, upd_stc, upd_slc, csg_increment            
 
     call mpi_init(ierr)
     call mpi_comm_size(mpi_comm_world, nprocs, ierr)
@@ -82,6 +83,7 @@ program apply_incr_noahmp_soil
     upd_stc = .false.
     upd_slc = .false.
     inc_prefix = ""
+    csg_increment = .false.
     !stype_prefix = "C96.mx100.soil_type"
     
     ! hard coded defaults--unlikely to change
@@ -163,8 +165,13 @@ program apply_incr_noahmp_soil
         noahmp_state%stc_bkg = noahmp_state%stc
 
         ! READ soil DA increments
-        call read_fv3_increment(tile_num, inc_path_full, date_str, hour_str, res, &
+        if (csg_increment) then
+             call read_csg_increment(tile_num, inc_path_full, inc_prefix, res, &
+                len_land_vec, tile2vector, noahmp_state, lsoil_incr, upd_stc, upd_slc)
+        else
+             call read_fv3_increment(tile_num, inc_path_full, date_str, hour_str, res, &
                     len_land_vec, tile2vector, inc_prefix, noahmp_state, lsoil_incr, upd_stc, upd_slc)
+        endif
 
         call calculate_landinc_mask(noahmp_state%swe,noahmp_state%vtype,noahmp_state%stype,&
                 len_land_vec, veg_type_landice, noahmp_state%soilsnow_tile)                ! soilsnow_fg_tile
@@ -620,6 +627,75 @@ end subroutine read_fv3_restart
     call netcdf_err(ierr, 'closing file: '//trim(incr_file) )
 
 end subroutine  read_fv3_increment
+
+!--------------------------------------------------------------
+!  read in soil increments from cube sphere file
+!--------------------------------------------------------------
+ subroutine read_csg_increment(tile_num, inc_path, inc_prefix, res, & 
+                len_land_vec, tile2vector, noahmp_state, lsoil_incr, upd_stc, upd_slc)
+
+ implicit none 
+
+ include 'mpif.h'
+
+ integer, intent(in) :: tile_num, res, len_land_vec, lsoil_incr
+ character(len=*), intent(in) :: inc_path, inc_prefix 
+ integer, intent(in) :: tile2vector(len_land_vec,2)
+ type(noahmp_type), intent(inout)  :: noahmp_state
+ logical, intent(in)               :: upd_stc, upd_slc
+
+ character(len=512) :: incr_file
+ logical :: file_exists
+ integer :: ierr 
+ integer :: id_dim, id_var, fres, ncid
+ integer :: nn, nl
+ character(len=20) :: var_name
+ character(len=1)  :: layerch
+
+    ! OPEN FILE
+    incr_file = trim(inc_path)//"/"//trim(inc_prefix)//".nc"
+
+    inquire(file=trim(incr_file), exist=file_exists)
+
+    if (.not. file_exists) then
+            print *, 'incr_file does not exist, ', &
+                    trim(incr_file) , ' exiting'
+            call mpi_abort(mpi_comm_world, 10) 
+    endif
+
+    ierr=nf90_open(trim(incr_file),nf90_nowrite,ncid)
+    call netcdf_err(ierr, 'opening file: '//trim(incr_file) )
+
+    ! CHECK DIMENSIONS
+    ierr=nf90_inq_dimid(ncid, 'grid_xt', id_dim)
+    call netcdf_err(ierr, 'reading grid_xt '//trim(incr_file) )
+    ierr=nf90_inquire_dimension(ncid,id_dim,len=fres)
+    call netcdf_err(ierr, 'reading grid_xt '//trim(incr_file) )
+
+    if ( fres /= res) then
+       print*,'fatal error: dimension fres ',fres, ' in '//trim(incr_file), ' not equal to res ',res
+       call mpi_abort(mpi_comm_world, ierr)
+    endif
+ 
+    noahmp_state%stc_inc = 0.0  !0 if no inc exists. TODO: need to do liau type "no update on 0"?
+    noahmp_state%slc_inc = 0.0
+    do nl=1, lsoil_incr
+        write(layerch, '(i1.1)') nl
+        if (upd_stc) then
+            var_name = 'soilt'//layerch
+            call read_nc_var2D(ncid, trim(incr_file), len_land_vec, res, tile2vector, &
+                            6, var_name, noahmp_state%stc_inc(:, nl), tile_num)
+        endif
+        if (upd_slc) then
+            var_name = 'soill'//layerch
+            call read_nc_var2D(ncid, trim(incr_file), len_land_vec, res, tile2vector, &
+                            6, var_name, noahmp_state%slc_inc(:, nl), tile_num)
+        endif
+    enddo
+    ierr=nf90_close(ncid)
+    call netcdf_err(ierr, 'closing file: '//trim(incr_file) )
+
+end subroutine read_csg_increment
 
 !--------------------------------------------------------
 ! Subroutine to read in a 2D variable from netcdf file, 
