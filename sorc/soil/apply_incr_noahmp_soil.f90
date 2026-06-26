@@ -91,7 +91,6 @@ program apply_incr_noahmp_soil
     fice_threshold=0.0
     lfrac_threshold=0.0001
     veg_type_landice = 15
-    !lsm  = 2      ! this code only applies to noahmp
     lsoil = 4     ! zsoil is hard-coded for 4 layers
     ivegsrc = 1   ! The NOAHMP LSM expects that the ivegsrc physics parameter is 1
     isot = 1      ! Noahmp expects 1
@@ -286,7 +285,7 @@ program apply_incr_noahmp_soil
 
  integer            :: slmsk_rest(res,res), slmsk_lfrac(res,res)
  double precision   :: fice(res,res)
- double precision   :: vtype(res,res)     ! saved as double in the file
+ double precision   :: vtype(res,res)     ! stored as double in restart files
  double precision   :: land_frac(res,res)
  integer, parameter :: vtype_landice=15   !, vtype_water=17
  integer            :: i, j, nn, len_land_vec_rest, diff_count
