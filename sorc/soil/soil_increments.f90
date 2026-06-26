@@ -11,15 +11,10 @@ module soil_increments
     public add_increment_soil
     public calculate_landinc_mask
     public apply_land_da_adjustments_soil
-    public lsm_noah, lsm_noahmp
 
-    integer, parameter            :: lsm_noah=1      !< flag for NOAH land surface model
-    integer, parameter            :: lsm_noahmp=2      !< flag for NOAHMP land surface model
-                                                     !! copied from GFS_typedefs.F90
-
-    ! control state for soil analysis:
-
+    integer, parameter       :: lsm_noahmp=2      !< flag for NOAHMP land surface model
     real, parameter          :: tfreez=273.16 !< con_t0c  in physcons
+    
 contains
 
 
@@ -311,9 +306,9 @@ subroutine apply_land_da_adjustments_soil(lsoil_incr, isot, ivegsrc,lensfc, &
       n_slc = 0
 
       do i=1,lensfc
-        if (stc_updated(i) == 1 ) then ! soil-only location
+        if (stc_updated(i) == 1 ) then 
             n_stc = n_stc+1
-            soiltype = isoiltype(i)     !nint(rsoiltype(i))
+            soiltype = isoiltype(i)    
             do l = 1, lsoil_incr
                !case 1: frz ==> frz, recalculate slc, smc remains
                !case 2: unfrz ==> frz, recalculate slc, smc remains
