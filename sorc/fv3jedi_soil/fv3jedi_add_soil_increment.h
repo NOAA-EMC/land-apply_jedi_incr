@@ -16,7 +16,8 @@
 #include "oops/util/Duration.h"
 #include "oops/util/Logger.h"
 
-#include "soil_increments_cpp_interface.h"
+#include "soil_increments.hpp"
+//#include "soil_increments_cpp_interface.h"
 
 namespace landincr {
   /**
@@ -101,12 +102,18 @@ namespace landincr {
       }
       // state vectors. TODO: do this in the fort-cpp interface
       auto bkg_swe = viewToVector1D(bkgv_swe);
-      auto bkg_vtype = viewToVector1D(bkgv_vtype);
-      auto bkg_stype = viewToVector1D(bkgv_stype); 
       auto bkg_stc = viewToVector2D(bkgv_stc);
       auto bk_bkg_stc = viewToVector2D(bkgv_stc);
       auto bkg_slc = viewToVector2D(bkgv_slc);
       auto bkg_smc = viewToVector2D(bkgv_smc); 
+     
+      // stype and vtype as int 
+      std::vector<int> ivtype(len_land_vec, -1);
+      std::vector<int> istype(len_land_vec, -1);
+      for (int i = 0; i < len_land_vec; ++i) {
+        ivtype[i] = static_cast<int>(bkgv_vtype(i, 0));
+        istype[i] = static_cast<int>(bkgv_stype(i, 0));
+      }
 
       // Read increment
       // oops::Log::info() << "Reading increment" << std::endl;
@@ -142,8 +149,10 @@ namespace landincr {
       // std::vector<int> mask_landice(geom_.nlevsfc(), 0);
       std::vector<int> soil_mask(len_land_vec, 0);
       // TODO: check if landfrac and icefrac are relevant for mask
-      SoilIncrements::calculateLandIncrementMask(bkg_swe, bkg_vtype, bkg_stype, 
-                              len_land_vec, veg_type_landice, soil_mask);
+      // SoilIncrements::calculateLandIncrementMask(bkg_swe, bkg_vtype, bkg_stype, 
+      //                        len_land_vec, veg_type_landice, soil_mask);
+      soil_increments::calculate_landinc_mask(bkg_swe, ivtype, istype,
+		      len_land_vec, veg_type_landice, soil_mask);
       // zero out increments for mask not equal to 1
       for (int i = 0; i < len_land_vec; ++i) {
           if (soil_mask[i] != 1) {
@@ -161,28 +170,34 @@ namespace landincr {
       fullConfig.get("print_debug", print_debug);
       std::vector<int> stc_updated(len_land_vec, 0);
       std::vector<int> slc_updated(len_land_vec, 0);
-      SoilIncrements::addIncrementSoil(
-          myrank, lsoil, lsoil_incr, len_land_vec, soil_mask, 
-          upd_stc, upd_slc, print_summary, print_debug,
-          bkg_stc, bkg_slc, bkg_smc, stc_inc, slc_inc,       
-          stc_updated, slc_updated  
-      );
-       
+      // SoilIncrements::addIncrementSoil(
+      //    myrank, lsoil, lsoil_incr, len_land_vec, soil_mask, 
+      //    upd_stc, upd_slc, print_summary, print_debug,
+      //    bkg_stc, bkg_slc, bkg_smc, stc_inc, slc_inc,       
+      //    stc_updated, slc_updated  );
+      soil_increments::add_increment_soil(lsoil_incr,stc_inc, slc_inc,bkg_stc, bkg_smc, bkg_slc, 
+		       stc_updated, slc_updated, soil_mask, soil_mask, len_land_vec, lsoil, myrank, 
+		       upd_stc, upd_slc, print_summary, print_debug);
+
       // post-increment adjustments to ensure consistency b/n soil T and soil M
-      SoilIncrements::applyLandDAadjustmentsSoil(
-          lsoil_incr, isot, ivegsrc, len_land_vec, lsoil,
-          istype, soil_mask, 
-          bk_bkg_stc, bkg_stc, bkg_smc, bkg_slc,
-          stc_updated, slc_updated, zsoil,
-          upd_stc, upd_slc, myrank, print_summary, print_debug
-      );
+      // SoilIncrements::applyLandDAadjustmentsSoil(
+      //    lsoil_incr, isot, ivegsrc, len_land_vec, lsoil,
+      //    istype, soil_mask, 
+      //    bk_bkg_stc, bkg_stc, bkg_smc, bkg_slc,
+      //    stc_updated, slc_updated, zsoil,
+      //    upd_stc, upd_slc, myrank, print_summary, print_debug);
+     soil_increments::apply_land_da_adjustments_soil(lsoil_incr, isot, ivegsrc, len_land_vec, lsoil,
+		     istype, soil_mask,
+		     bk_bkg_stc, bkg_stc, bkg_smc, bkg_slc,
+                     stc_updated, slc_updated, zsoil,
+                     upd_stc, upd_slc, myrank, print_summary, print_debug);
 
       // update state
       for (size_t i = 0; i < bkg_stc.size(); ++i) {
         for (size_t j = 0; j < bkg_stc[i].size(); ++j) {
-          bkgv_stc(i, j) = static_cast<double>(bkg_stc[i][j]);
-          bkgv_slc(i, j) = static_cast<double>(bkg_slc[i][j]);
-	  bkgv_smc(i, j) = static_cast<double>(bkg_smc[i][j]);
+          bkgv_stc(i, j) = bkg_stc[i][j];
+          bkgv_slc(i, j) = bkg_slc[i][j];
+	  bkgv_smc(i, j) = bkg_smc[i][j];
         }
       }
 
@@ -196,7 +211,7 @@ namespace landincr {
     }
 
    private:
-      static constexpr std::array<float, 4> zsoil = { -0.1, -0.4, -1.0, -2.0 };
+      const std::vector<double> zsoil = { -0.1, -0.4, -1.0, -2.0 };
       static constexpr int veg_type_landice = 15;
       static constexpr int lsoilc = 4;     // zsoil is hard-coded for 4 layers
       static constexpr int ivegsrc = 1;   // The NOAHMP LSM expects that the ivegsrc physics parameter is 1

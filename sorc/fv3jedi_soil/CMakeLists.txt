@@ -5,8 +5,9 @@
 list( APPEND sorc_files_fv3jedisoilinc
     ./fv3jedi_add_soil_increment.cc
     ./fv3jedi_add_soil_increment.h
-    ./soil_increments_cpp_interface.h
-    ./soil_increments_c.f90
+    ./soil_increments.hpp
+    #    ./soil_increments_cpp_interface.h
+    #    ./soil_increments_c.f90
 )
 
 ecbuild_add_executable( TARGET          fv3jedi_soil_incr.x
