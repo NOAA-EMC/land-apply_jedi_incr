@@ -12,7 +12,7 @@ else
         # assume installed a subdir of DA_update
         env_file="../env_GDASApp" 
 fi 
-source ../env_GDASApp 
+source $env_file
 
 if [[ -d exec ]]; then 
   rm -rf exec 
@@ -26,7 +26,7 @@ mkdir build
 cd build 
 
 # configure 
-cmake .. -DCMAKE_INSTALL_PREFIX=../exec
+cmake .. -DCMAKE_PREFIX_PATH=../../install -DCMAKE_INSTALL_PREFIX=../exec 
 
 # build 
 cmake --build  .
