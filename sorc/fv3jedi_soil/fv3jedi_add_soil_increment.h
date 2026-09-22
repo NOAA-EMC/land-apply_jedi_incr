@@ -17,7 +17,6 @@
 #include "oops/util/Logger.h"
 
 #include "soil_increments.hpp"
-//#include "soil_increments_cpp_interface.h"
 
 namespace landincr {
   /**
