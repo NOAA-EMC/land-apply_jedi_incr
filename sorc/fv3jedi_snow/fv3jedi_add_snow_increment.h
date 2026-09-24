@@ -72,8 +72,8 @@ class AddSnowIncrement : public oops::Application {
     dx.toFieldSet(inc_fs);
     
     // assuming frac_grid=True
-    if (!bkg_fs.has("weasdl") ||  
-        !bkg_fs.has("snodl") ||
+    if (!bkg_fs.has("sheleg") ||  
+        !bkg_fs.has("totalSnowDepth") ||
         !bkg_fs.has("snowxy") ||
         !bkg_fs.has("sneqvoxy") ||
         !bkg_fs.has("zsnsoxy") ||
@@ -86,10 +86,10 @@ class AddSnowIncrement : public oops::Application {
     }
 
     auto swe_view =
-        atlas::array::make_view<double, 2>(bkg_fs["weasdl"]);
+        atlas::array::make_view<double, 2>(bkg_fs["sheleg"]);
 
     auto snow_depth_view =
-        atlas::array::make_view<double, 2>(bkg_fs["snodl"]);
+        atlas::array::make_view<double, 2>(bkg_fs["totalSnowDepth"]);
 
     auto active_layers_view =
         atlas::array::make_view<double, 2>(bkg_fs["snowxy"]);
@@ -143,11 +143,11 @@ class AddSnowIncrement : public oops::Application {
 
     std::vector<double> snow_depth_increment(nland, 0.0);
 
-    if (!inc_fs.has("snodl")) {
-      throw eckit::BadValue("Snow-depth increment field snodl is missing", Here());
+    if (!inc_fs.has("totalSnowDepth")) {
+      throw eckit::BadValue("Snow-depth increment field is missing", Here());
     }
 
-    auto increment_view = atlas::array::make_view<double, 2>(inc_fs["snodl"]);
+    auto increment_view = atlas::array::make_view<double, 2>(inc_fs["totalSnowDepth"]);
 
     for (std::size_t i = 0; i < nland; ++i) {
       snow_depth_increment[i] = increment_view(i, 0);
