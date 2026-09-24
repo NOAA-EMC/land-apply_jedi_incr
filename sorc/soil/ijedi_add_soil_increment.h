@@ -4,9 +4,9 @@
 
 #include "eckit/config/LocalConfiguration.h"
 
-#include "fv3jedi/Geometry/Geometry.h"
-#include "fv3jedi/Increment/Increment.h"
-#include "fv3jedi/State/State.h"
+#include "ijedi/Geometry/Geometry.h"
+#include "ijedi/Increment/Increment.h"
+#include "ijedi/State/State.h"
 
 #include "oops/base/Variables.h"
 #include "oops/interface/VariableChange.h"
@@ -39,12 +39,12 @@ namespace landincr {
 
       // We assume both state and increment are in the same geometry
       // const ijedi::Geometry<fv3jedi::Traits> geom_(eckit::LocalConfiguration(fullConfig, "geometry"),this->getComm());
-      fv3jedi::Geometry geom_(eckit::LocalConfiguration(fullConfig, "geometry"),this->getComm());
+      ijedi::Geometry<ijedi::Traits> geom_(eckit::LocalConfiguration(fullConfig, "geometry"),this->getComm());
       // oops::Log::info() << "geom ny "<<geom_.npy() << " nx " << geom_.npx() << std::endl;
 
       // Read state
       // ijedi::State<ijedi::Traits> xx(geom_, eckit::LocalConfiguration(fullConfig, "background state"));
-      fv3jedi::State xx(geom_, eckit::LocalConfiguration(fullConfig, "background state"));
+      ijedi::State<ijedi::Traits> xx(geom_, eckit::LocalConfiguration(fullConfig, "background state"));
       oops::Log::test() << "Background state: " << xx << std::endl;
 
       atlas::FieldSet bkg_fs;
@@ -119,7 +119,7 @@ namespace landincr {
       const eckit::LocalConfiguration incParams(fullConfig, "increment");
       oops::Variables incVars(incParams, "variables");
       // ijedi::Increment<ijedi::Traits> dx(geom_, incVars, xx.validTime());
-      fv3jedi::Increment dx(geom_, incVars, xx.validTime());
+      ijedi::Increment<ijedi::Traits> dx(geom_, incVars, xx.validTime());
       dx.read(incParams);
       oops::Log::test() << "Increment: " << dx << std::endl;
 
