@@ -1,0 +1,86 @@
+geometry:
+  geometry_type: landVector
+  nlevels: 1
+  latlon_file: "/scratch4/NCEPDEV/land/data/ufs-land-driver/vector_inputs/C96.mx100/ufs-land_C96.mx100_static_fields.nc"
+  lat_name: latitude
+  lon_name: longitude
+  elev_name: elevation
+time window:
+  begin: '2024-05-31T12:00:00Z'
+  length: PT24H
+  bound to include: begin
+background state:
+  date time: '2024-06-01T00:00:00Z'
+  date: '2024-06-01T00:00:00Z'
+  state variables:
+  - stc
+  - slc
+  - soilMoistureVolumetric
+  - sheleg
+  io:
+    filetype: landVector
+    gridtype: landVector
+    datapath: ./bkg/mem000/
+    filenames:
+    - ufs_land_restart.2024-06-01_00-00-00.nc
+    field io names:
+      sheleg: snow_water_equiv
+      stc: temperature_soil
+      slc: soil_liquid_vol
+      soilMoistureVolumetric: soil_moisture_vol
+static fields:
+  date time: '2024-06-01T00:00:00Z'
+  date: '2024-06-01T00:00:00Z'
+  state variables:
+  - vtype
+  - stype
+  io:
+    filetype: landVector
+    gridtype: landVector
+    datapath: ./bkg/mem000/
+    filenames:
+    - ufs-land_C96.mx100_static_fields.nc
+    field io names:
+      vtype: vegetation_category
+      stype: soil_category
+
+increment:
+  lsoil_incr: 2
+  variables:
+  - stc
+  - slc
+    #  - soilMoistureVolumetric
+    #  - sheleg
+  io:
+    filetype: landVector
+    gridtype: landVector
+    date time: '2024-06-01T00:00:00Z'
+    datapath: ./inc/
+    filenames: 
+    - ufs_land_increment.2024-06-01_00-00-00.nc
+    field io names:
+      #      sheleg: snow_water_equiv
+      stc: temperature_soil
+      slc: soil_liquid_vol
+        #      soilMoistureVolumetric: soil_moisture_vol
+
+output state:
+  #  state variables:
+  #  - stc
+  #  - slc
+  #  - soilMoistureVolumetric
+  #  - sheleg
+  io:
+    filetype: landVector
+    gridtype: landVector
+    date time: '2024-06-01T00:00:00Z'
+    date: '2024-06-01T00:00:00Z'
+    datapath: ./anl/
+    update existing file: true
+    filename:
+    - ufs_land_bpi.2024-06-01_00-00-00.nc
+    field io names:
+      sheleg: snow_water_equiv
+      stc: temperature_soil
+      slc: soil_liquid_vol
+      soilMoistureVolumetric: soil_moisture_vol
