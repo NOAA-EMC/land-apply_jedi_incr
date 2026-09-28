@@ -39,12 +39,12 @@ namespace landincr {
 
       // We assume both state and increment are in the same geometry
       // const ijedi::Geometry<fv3jedi::Traits> geom_(eckit::LocalConfiguration(fullConfig, "geometry"),this->getComm());
-      ijedi::Geometry<ijedi::Traits> geom_(eckit::LocalConfiguration(fullConfig, "geometry"),this->getComm());
+      ijedi::Geometry geom_(eckit::LocalConfiguration(fullConfig, "geometry"),this->getComm());
       // oops::Log::info() << "geom ny "<<geom_.npy() << " nx " << geom_.npx() << std::endl;
 
       // Read state
       // ijedi::State<ijedi::Traits> xx(geom_, eckit::LocalConfiguration(fullConfig, "background state"));
-      ijedi::State<ijedi::Traits> xx(geom_, eckit::LocalConfiguration(fullConfig, "background state"));
+      ijedi::State xx(geom_, eckit::LocalConfiguration(fullConfig, "background state"));
       oops::Log::test() << "Background state: " << xx << std::endl;
 
       atlas::FieldSet bkg_fs;
@@ -64,7 +64,7 @@ namespace landincr {
           throw eckit::BadValue("Missing required fields in state FieldSet", Here());
       }
       auto bkgv_swe = atlas::array::make_view<double, 2>(bkg_fs["sheleg"]);
-      if (!bkg_fs.has("vtype") ) {
+      /*if (!bkg_fs.has("vtype") ) {
           oops::Log::error() << "Missing required fields vtype in state FieldSet. Aborting." << std::endl;
           throw eckit::BadValue("Missing required fields in state FieldSet", Here());
       }
@@ -74,7 +74,7 @@ namespace landincr {
           throw eckit::BadValue("Missing required fields in state FieldSet", Here());
       }
       auto bkgv_stype = atlas::array::make_view<double, 2>(bkg_fs["stype"]);
-
+*/
       if (!bkg_fs.has("stc") ) {
           oops::Log::error() << "Missing required fields stc in state FieldSet. Aborting." << std::endl;
           throw eckit::BadValue("Missing required fields in state FieldSet", Here());
@@ -92,7 +92,23 @@ namespace landincr {
       auto bkgv_smc = atlas::array::make_view<double, 2>(bkg_fs["soilMoistureVolumetric"]);
       // oops::Log::info() << "Finished reading background state" << std::endl;
 
-      // vtype and stype to integers
+      // vtype and stype from static file
+      ijedi::State xs(geom_, eckit::LocalConfiguration(fullConfig, "static fields"));
+      oops::Log::test() << "Time invariant fields: " << xs << std::endl;
+
+      atlas::FieldSet static_fs;
+      xs.toFieldSet(static_fs);
+      if (!static_fs.has("vtype") ) {
+          oops::Log::error() << "Missing required fields vtype in state FieldSet. Aborting." << std::endl;
+          throw eckit::BadValue("Missing required fields in state FieldSet", Here());
+      }
+      auto bkgv_vtype = atlas::array::make_view<double, 2>(static_fs["vtype"]);
+      if (!static_fs.has("stype") ) {
+          oops::Log::error() << "Missing required fields stype in state FieldSet. Aborting." << std::endl;
+          throw eckit::BadValue("Missing required fields in state FieldSet", Here());
+      }
+      auto bkgv_stype = atlas::array::make_view<double, 2>(static_fs["stype"]);      
+      
       int len_land_vec = bkg_fs["sheleg"].shape(0);
       int lsoil = bkg_fs["stc"].shape(1);
       if (lsoil != lsoilc) {
@@ -119,7 +135,7 @@ namespace landincr {
       const eckit::LocalConfiguration incParams(fullConfig, "increment");
       oops::Variables incVars(incParams, "variables");
       // ijedi::Increment<ijedi::Traits> dx(geom_, incVars, xx.validTime());
-      ijedi::Increment<ijedi::Traits> dx(geom_, incVars, xx.validTime());
+      ijedi::Increment dx(geom_, incVars, xx.validTime());
       dx.read(incParams);
       oops::Log::test() << "Increment: " << dx << std::endl;
 

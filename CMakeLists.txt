@@ -19,7 +19,7 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules)
 
 find_package(NetCDF REQUIRED COMPONENTS CXX Fortran)
 find_package(oops CONFIG REQUIRED HINTS "../../build" "../../install")
-find_package(fv3jedi CONFIG REQUIRED HINTS "../../build" "../../install")
+find_package(ijedi CONFIG REQUIRED HINTS "../../build" "../../install")
 find_package(MPI REQUIRED Fortran)
 
 #add_subdirectory(sorc/snow)
