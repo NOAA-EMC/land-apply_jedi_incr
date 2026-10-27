@@ -59,7 +59,7 @@ class AddSnowIncrement : public oops::Application {
     // Read increment
     // oops::Log::info() << "Reading increment" << std::endl;
     const eckit::LocalConfiguration incParams(fullConfig, "increment");
-    oops::Variables incVars(incParams, "variables");  //keeping "variales" for consistency with soilinc, but only snodl expected
+    oops::Variables incVars(incParams, "variables");  //inc variable expected: snodl 
     // ijedi::Increment<ijedi::Traits> dx(geom_, incVars, xx.validTime());
     fv3jedi::Increment dx(geom_, incVars, xx.validTime());
     dx.read(incParams);
