@@ -123,7 +123,7 @@ class AddSnowIncrement : public oops::Application {
       snow_state.active_snow_layers[i] = active_layers_view(i, 0);
       snow_state.swe_previous[i] = swe_previous_view(i, 0);
 
-      // Noah-MP snow arrays have three active snow layers.
+      // Noah-MP snow arrays can have upto three active snow layers.
       for (std::size_t k = 0; k < snow_increments::kSnowLayers; ++k) {
         snow_state.temperature_snow[i][k] = snow_temperature_view(i, k);
 
