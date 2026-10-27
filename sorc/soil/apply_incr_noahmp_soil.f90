@@ -10,16 +10,16 @@ program apply_incr_noahmp_soil
 
 
  type noahmp_type
-   double precision, allocatable :: stc_bkg     (:,:)
-   double precision, allocatable :: stc         (:,:)
-   double precision, allocatable :: smc         (:,:)
-   double precision, allocatable :: slc         (:,:)
-   double precision, allocatable :: stc_inc     (:,:)
-   double precision, allocatable :: slc_inc     (:,:)
+   real, allocatable :: stc_bkg     (:,:)
+   real, allocatable :: stc         (:,:)
+   real, allocatable :: smc         (:,:)
+   real, allocatable :: slc         (:,:)
+   real, allocatable :: stc_inc     (:,:)
+   real, allocatable :: slc_inc     (:,:)
    integer, allocatable          :: stc_updated        (:)
    integer, allocatable          :: slc_updated        (:)
    integer, allocatable          :: soilsnow_tile      (:)
-   double precision, allocatable :: swe                (:)
+   real, allocatable :: swe                (:)
    integer, allocatable          :: vtype              (:)
    integer, allocatable          :: stype              (:)
  end type noahmp_type 
@@ -48,12 +48,12 @@ program apply_incr_noahmp_soil
 
  logical            :: print_summary, print_debug, frac_grid
 
- double precision   :: fice_threshold, lfrac_threshold
+ real   :: fice_threshold, lfrac_threshold
 
  integer            :: lsoil, lsoil_incr, isot, ivegsrc
  integer            :: veg_type_landice   !, lsm
  character(len=256) :: inc_prefix, stype_prefix
- double precision, allocatable :: styper(:,:)
+ real, allocatable :: styper(:,:)
  logical                       :: upd_stc
  logical                       :: upd_slc
  logical                       :: csg_increment   ! if true, read increments from cube sphere file instead of fv3 increment file. 
@@ -269,10 +269,10 @@ program apply_incr_noahmp_soil
  character(len=*), intent(in)   :: orog_path, stype_prefix
  character(len=20), intent(in)  :: otype
  logical, intent(in)            :: fice_grid
- double precision, intent(in)      :: lfrac_thold, fice_fhold
+ real, intent(in)      :: lfrac_thold, fice_fhold
  integer, intent(out)              :: len_land_vec
  integer, allocatable, intent(out) :: tile2vector(:,:)
- double precision, intent(out)     :: styper(res,res) 
+ real, intent(out)     :: styper(res,res) 
 
  character(len=512) :: restart_file, filename
  character(len=1)   :: rankch
@@ -281,9 +281,9 @@ program apply_incr_noahmp_soil
  integer :: id_dim, id_var, fres
 
  integer            :: slmsk_rest(res,res), slmsk_lfrac(res,res)
- double precision   :: fice(res,res)
- double precision   :: vtype(res,res)     ! stored as double in restart files
- double precision   :: land_frac(res,res)
+ real   :: fice(res,res)
+ real   :: vtype(res,res)     ! stored as double in restart files
+ real   :: land_frac(res,res)
  integer, parameter :: vtype_landice=15   !, vtype_water=17
  integer            :: i, j, nn, len_land_vec_rest, diff_count
  integer, allocatable  :: tile2vector_rest(:,:), tile2vector_diff(:,:)
@@ -509,7 +509,7 @@ end subroutine get_fv3_mapping_lfrac
  logical :: file_exists
  integer :: ierr, id_dim, fres
  integer :: nn
- double precision :: vstyper(len_land_vec)
+ real :: vstyper(len_land_vec)
 
     ! OPEN FILE
     inquire(file=trim(restart_file), exist=file_exists)
@@ -707,11 +707,11 @@ subroutine read_nc_var2D(ncid, file_name, len_land_vec, res, tile2vector, in3D_v
     integer, intent(in)             :: tile2vector(len_land_vec,2)
     integer, intent(in)             :: in3D_vdim ! 0 - input is 2D, 
                                                  ! >0, gives dim of 3rd dimension
-    double precision, intent(out)   :: data_vec(len_land_vec) 
+    real, intent(out)   :: data_vec(len_land_vec) 
     integer, intent(in), optional   :: l_dim  ! if variable has a level dimension, provide the level to read in (starting from 1). Only used when in3D_vdim > 0
 
-    double precision :: dummy2D(res, res) 
-    double precision :: dummy3D(res, res, in3D_vdim)  
+    real :: dummy2D(res, res) 
+    real :: dummy3D(res, res, in3D_vdim)  
     integer          :: nn, ierr, id_var, l_dim_local
 
     if(present(l_dim)) then 
@@ -749,9 +749,9 @@ subroutine read_nc_var3D(ncid, file_name, len_land_vec, res, vdim,  &
     character(len=*), intent(in)    :: file_name
     character(len=*), intent(in)    :: var_name
     integer, intent(in)             :: tile2vector(len_land_vec,2)
-    double precision, intent(out)   :: data_vec(len_land_vec, vdim)
+    real, intent(out)   :: data_vec(len_land_vec, vdim)
 
-    double precision :: dummy3D(res, res, vdim) 
+    real :: dummy3D(res, res, vdim) 
     integer          :: nn, ierr, id_var
 
     ierr=nf90_inq_varid(ncid, trim(var_name), id_var)
@@ -802,10 +802,10 @@ subroutine write_nc_var2D(ncid, file_name, len_land_vec, res, tile2vector,   &
     integer, intent(in)             :: tile2vector(len_land_vec,2)
     integer, intent(in)             :: in3D_vdim ! 0 - input is 2D, 
                                                  ! >0, gives dim of 3rd dimension
-    double precision, intent(in)    :: data_vec(len_land_vec)
+    real, intent(in)    :: data_vec(len_land_vec)
 
-    double precision :: dummy2D(res, res) 
-    double precision :: dummy3D(res, res, in3D_vdim)
+    real :: dummy2D(res, res) 
+    real :: dummy3D(res, res, in3D_vdim)
     integer          :: nn, ierr, id_var
 
     ierr=nf90_inq_varid(ncid, trim(var_name), id_var)
@@ -848,9 +848,9 @@ subroutine write_nc_var3D(ncid, file_name, len_land_vec, res, vdim, &
     character(len=*), intent(in)    :: file_name
     character(len=*), intent(in)    :: var_name
     integer, intent(in)             :: tile2vector(len_land_vec,2)
-    double precision, intent(in)    :: data_vec(len_land_vec, vdim)
+    real, intent(in)    :: data_vec(len_land_vec, vdim)
 
-    double precision :: dummy3D(res, res, vdim)
+    real :: dummy3D(res, res, vdim)
     integer          :: nn, ierr, id_var
 
     ierr=nf90_inq_varid(ncid, trim(var_name), id_var)
