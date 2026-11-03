@@ -216,11 +216,39 @@ namespace landincr {
         }
       }
 
-      xx.fromFieldSet(bkg_fs);      
+      /*xx.fromFieldSet(bkg_fs);
       oops::Log::test() << "Updated State: " << xx << std::endl;
-
       // Write updated state to file
       xx.write(eckit::LocalConfiguration(fullConfig, "output state"));
+      */
+
+      // Write only fields requested by output config
+      //ijedi::State xo(geom_, eckit::LocalConfiguration(fullConfig, "output state"));
+      eckit::LocalConfiguration outConfig(fullConfig, "output state");
+      oops::Variables outVars(outConfig, "state variables");
+
+      // State 'xo' with only target variables
+      ijedi::State xo(geom_, outVars, xx.validTime());
+
+      atlas::FieldSet anl_fs;
+      xo.toFieldSet(anl_fs);
+      for (auto & field : anl_fs) 
+      {
+        const std::string varName = field.name();
+        if (bkg_fs.has(varName)) {
+          auto viewSrc = atlas::array::make_view<double, 2>(bkg_fs[varName]);
+          auto viewDst = atlas::array::make_view<double, 2>(field);
+          viewDst.assign(viewSrc);
+        } else {
+          oops::Log::error() << "Variable " << varName
+                               << " configured in output state but missing in background !" << std::endl;
+	   throw eckit::BadValue("Missing output fields in background FieldSet", Here());
+        }
+      }
+
+      xo.fromFieldSet(anl_fs);
+      oops::Log::test() << "Output state: " << xo << std::endl;
+      xo.write(outConfig);
 
       return 0;
     }

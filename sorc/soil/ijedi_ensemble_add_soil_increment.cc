@@ -1,0 +1,12 @@
+#include "ijedi_add_soil_increment.h"
+
+#include "ijedi/Traits.h"
+#include "oops/runs/TemplatedEnsembleApplication.h"
+#include "oops/runs/Run.h"
+
+int main(int argc,  char ** argv) {
+  oops::Run run(argc, argv);
+  //AddLandIncrement<ijedi::Traits> addLandIncrement;
+  oops::TemplatedEnsembleApplication<landincr::AddLandIncrement> addLandIncrement;
+  return run.execute(addLandIncrement);
+}
