@@ -150,7 +150,7 @@ program apply_incr_noahmp_soil
        
         ! map soil types
         do nn=1,len_land_vec
-            noahmp_state%stype = nint(styper(tile2vector(nn,1), tile2vector(nn,2)))
+            noahmp_state%stype(nn) = nint(styper(tile2vector(nn,1), tile2vector(nn,2)))
         enddo
 
         ! READ RESTART FILE 
