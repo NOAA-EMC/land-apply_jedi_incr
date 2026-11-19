@@ -3,7 +3,8 @@
  * @brief Routines for applying soil DA increments
  * Copied from land_increments
  * @author Clara Draper ESRL/PSL
- * @author Tseganeh ZG April 2026 - bring soil specific parts close to snow DA increments code in GDASApp
+ * @author Yuan Xue NOAA/EMC
+ * @author Tseganeh Z Gichamo (NOAA/OMD)  April 2026 - bring soil specific parts close to snow DA increments code in GDASApp
  */
 
 #ifndef SOIL_INCREMENTS_HPP
@@ -393,16 +394,18 @@ void add_increment_soil(
  *
  * @author Clara Draper @date March 2021
  * @author Yuan Xue - introduce stype to make the mask calculation more generic
+ *
  */
 void calculate_landinc_mask(
     const std::vector<double>& swe,
     const std::vector<int>& vtype,
     const std::vector<int>& stype,
+    const std::vector<double>& fice,
     int lensfc,
     int veg_type_landice,
     std::vector<int>& mask)
 {
-    mask.assign(lensfc, -1);  // not land
+    //mask.assign(lensfc, -1);  // not land--assigned before calling this func
 
     for (int i = 0; i < lensfc; ++i) {
         if (stype[i] > 0) {
@@ -411,10 +414,17 @@ void calculate_landinc_mask(
             } else {
                 mask[i] = 1;  // non-snow covered land
             }
-        }
+        //}
         if (vtype[i] == veg_type_landice) {
             mask[i] = 0;  // land-ice
         }
+	//ammend grids for fice
+	if (fice[i] > 0.) {
+	    mask[i] = 0;  // sea ice 
+	}
+      } else {
+	  mask[i] = -1;
+      }
     }
 }
 
@@ -491,7 +501,7 @@ void apply_land_da_adjustments_soil(
         for (int i = 0; i < lensfc; ++i) {
             if (stc_updated[i] == 1) {
                 n_stc++;
-                int soiltype = isoiltype[i];
+                int soiltype = isoiltype[i] - 1;   //fort to cpp
 
                 for (int l = 0; l < lsoil_incr; ++l) {
                     // Case 1 & 2: frozen or becoming frozen

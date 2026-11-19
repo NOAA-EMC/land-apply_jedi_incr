@@ -150,7 +150,7 @@ program apply_incr_noahmp_soil
        
         ! map soil types
         do nn=1,len_land_vec
-            noahmp_state%stype = nint(styper(tile2vector(nn,1), tile2vector(nn,2)))
+            noahmp_state%stype(nn) = nint(styper(tile2vector(nn,1), tile2vector(nn,2)))
         enddo
 
         ! READ RESTART FILE 
@@ -284,6 +284,8 @@ program apply_incr_noahmp_soil
  real   :: fice(res,res)
  real   :: vtype(res,res)     ! stored as double in restart files
  real   :: land_frac(res,res)
+ real   :: stype_rest(res,res)
+
  integer, parameter :: vtype_landice=15   !, vtype_water=17
  integer            :: i, j, nn, len_land_vec_rest, diff_count
  integer, allocatable  :: tile2vector_rest(:,:), tile2vector_diff(:,:)
@@ -391,6 +393,15 @@ program apply_incr_noahmp_soil
       call netcdf_err(ierr, 'reading fice id' )
       ierr=nf90_get_var(ncid, id_var, fice)
       call netcdf_err(ierr, 'reading fice' )   
+    endif
+
+    ierr=nf90_inq_varid(ncid, "stype", id_var)
+    call netcdf_err(ierr, 'reading stype id' )
+    ierr=nf90_get_var(ncid, id_var, stype_rest)
+    if (ierr == 0) then 
+        write (6, *) 'using soil type from restart file'
+        styper = stype_rest
+    !call netcdf_err(ierr, 'reading soil_type' )
     endif
 
     ! close file

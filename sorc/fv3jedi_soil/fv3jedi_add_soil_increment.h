@@ -63,7 +63,12 @@ namespace landincr {
           oops::Log::error() << "Missing required fields SWE in state FieldSet. Aborting." << std::endl;
           throw eckit::BadValue("Missing required fields in state FieldSet", Here());
       }
-      auto bkgv_swe = atlas::array::make_view<double, 2>(bkg_fs["sheleg"]);
+      auto bkgv_swe = atlas::array::make_view<double, 2>(bkg_fs["sheleg"]); 
+      if (!bkg_fs.has("slmsk") ) {
+          oops::Log::error() << "Missing required fields slmsk in state FieldSet. Aborting." << std::endl;
+          throw eckit::BadValue("Missing required fields in state FieldSet", Here());
+      }
+      auto bkgv_slmsk = atlas::array::make_view<double, 2>(bkg_fs["slmsk"]);
       if (!bkg_fs.has("vtype") ) {
           oops::Log::error() << "Missing required fields vtype in state FieldSet. Aborting." << std::endl;
           throw eckit::BadValue("Missing required fields in state FieldSet", Here());
@@ -92,7 +97,7 @@ namespace landincr {
       auto bkgv_smc = atlas::array::make_view<double, 2>(bkg_fs["soilMoistureVolumetric"]);
       // oops::Log::info() << "Finished reading background state" << std::endl;
 
-      // vtype and stype to integers
+      // mask, vtype and stype to integers
       int len_land_vec = bkg_fs["sheleg"].shape(0);
       int lsoil = bkg_fs["stc"].shape(1);
       if (lsoil != lsoilc) {
@@ -105,13 +110,25 @@ namespace landincr {
       auto bk_bkg_stc = viewToVector2D(bkgv_stc);
       auto bkg_slc = viewToVector2D(bkgv_slc);
       auto bkg_smc = viewToVector2D(bkgv_smc); 
-     
+      // Adjust grid cells for ice fraction if field exists
+      std::vector<double> bkg_fice;
+      if (bkg_fs.has("fraction_of_ice") ) {
+          auto bkgv_fice = atlas::array::make_view<double, 2>(bkg_fs["fraction_of_ice"]);
+          bkg_fice = viewToVector1D(bkgv_fice);
+      } else {
+          oops::Log::warning() << "Field fice not found. Setting all to zero." << std::endl;
+          bkg_fice.assign(len_land_vec, 0.0);
+      }
+
       // stype and vtype as int 
       std::vector<int> ivtype(len_land_vec, -1);
       std::vector<int> istype(len_land_vec, -1);
+      std::vector<int> soil_mask(len_land_vec, -1);  //default -1 not land
+
       for (int i = 0; i < len_land_vec; ++i) {
         ivtype[i] = static_cast<int>(bkgv_vtype(i, 0));
         istype[i] = static_cast<int>(bkgv_stype(i, 0));
+        soil_mask[i] = static_cast<int>(bkgv_slmsk(i, 0));
       }
 
       // Read increment
@@ -146,11 +163,11 @@ namespace landincr {
  
       // read/construct mask for landice and snow tiles
       // std::vector<int> mask_landice(geom_.nlevsfc(), 0);
-      std::vector<int> soil_mask(len_land_vec, 0);
+      // std::vector<int> soil_mask(len_land_vec, 0);
       // TODO: check if landfrac and icefrac are relevant for mask
       // SoilIncrements::calculateLandIncrementMask(bkg_swe, bkg_vtype, bkg_stype, 
       //                        len_land_vec, veg_type_landice, soil_mask);
-      soil_increments::calculate_landinc_mask(bkg_swe, ivtype, istype,
+      soil_increments::calculate_landinc_mask(bkg_swe, ivtype, istype, bkg_fice,
 		      len_land_vec, veg_type_landice, soil_mask);
       // zero out increments for mask not equal to 1
       for (int i = 0; i < len_land_vec; ++i) {
