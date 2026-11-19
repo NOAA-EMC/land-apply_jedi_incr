@@ -268,7 +268,7 @@ void add_increment_soil(
     std::vector<int>& stc_updated,
     std::vector<int>& slc_updated,
     const std::vector<int>& soilsnow_tile,
-    const std::vector<int>& soilsnow_fg_tile,
+    //const std::vector<int>& soilsnow_fg_tile,
     int lensfc,
     int lsoil,
     int myrank,
@@ -299,7 +299,7 @@ void add_increment_soil(
     // Main loop over grid cells
     for (int ij = 0; ij < lensfc; ++ij) {
         int mask_tile = soilsnow_tile[ij];
-        int mask_fg_tile = soilsnow_fg_tile[ij];
+        //int mask_fg_tile = soilsnow_fg_tile[ij];
 
         // mask: 1 - soil, 2 - snow, 0 - land-ice, -1 - not land
         if (mask_tile <= 0) {
@@ -308,7 +308,7 @@ void add_increment_soil(
         }
 
         // Skip if snow is present before or after snow update
-        if (mask_fg_tile == 2 || mask_tile == 2) {
+        if (mask_tile == 2) {     //mask_fg_tile == 2 ||
             nsnowupd++;
             continue;
         }
@@ -358,7 +358,16 @@ void add_increment_soil(
         }
     }
 
-    if (print_summary && myrank == 0) {
+    if (print_debug) {
+        std::cout << " statistics of grids number processed for rank : " << std::setw(2) << myrank << std::endl;
+        std::cout << " soil grid total" << std::setw(8) << lensfc << std::endl;
+        std::cout << " soil grid cells slc updated = " << std::setw(8) << nslcupd << std::endl;
+        std::cout << " soil grid cells stc updated = " << std::setw(8) << nstcupd << std::endl;
+        std::cout << " soil grid cells not updated, frozen = " << std::setw(8) << nfrozen << std::endl;
+        std::cout << " soil grid cells update, became frozen = " << std::setw(8) << nfrozen_upd << std::endl;
+        std::cout << " (not updated yet) snow grid cells = " << std::setw(8) << nsnowupd << std::endl;
+        std::cout << " grid cells, without soil or snow = " << std::setw(8) << nother << std::endl;
+    } else if (print_summary && myrank == 0) {
         std::cout << " statistics of grids number processed for rank : " << std::setw(2) << myrank << std::endl;
         std::cout << " soil grid total" << std::setw(8) << lensfc << std::endl;
         std::cout << " soil grid cells slc updated = " << std::setw(8) << nslcupd << std::endl;
@@ -369,16 +378,6 @@ void add_increment_soil(
         std::cout << " grid cells, without soil or snow = " << std::setw(8) << nother << std::endl;
     }
 
-    if (print_debug) {
-        std::cout << " statistics of grids number processed for rank : " << std::setw(2) << myrank << std::endl;
-        std::cout << " soil grid total" << std::setw(8) << lensfc << std::endl;
-        std::cout << " soil grid cells slc updated = " << std::setw(8) << nslcupd << std::endl;
-        std::cout << " soil grid cells stc updated = " << std::setw(8) << nstcupd << std::endl;
-        std::cout << " soil grid cells not updated, frozen = " << std::setw(8) << nfrozen << std::endl;
-        std::cout << " soil grid cells update, became frozen = " << std::setw(8) << nfrozen_upd << std::endl;
-        std::cout << " (not updated yet) snow grid cells = " << std::setw(8) << nsnowupd << std::endl;
-        std::cout << " grid cells, without soil or snow = " << std::setw(8) << nother << std::endl;
-    }
 }
 
 /**
@@ -405,25 +404,23 @@ void calculate_landinc_mask(
     int veg_type_landice,
     std::vector<int>& mask)
 {
-    //mask.assign(lensfc, -1);  // not land--assigned before calling this func
+    mask.assign(lensfc, -1);  // not land
 
     for (int i = 0; i < lensfc; ++i) {
-        if (stype[i] > 0) {
-            if (swe[i] > 0.001) {
-                mask[i] = 2;  // snow covered land
-            } else {
-                mask[i] = 1;  // non-snow covered land
-            }
-        //}
-        if (vtype[i] == veg_type_landice) {
-            mask[i] = 0;  // land-ice
+      if (stype[i] > 0) {
+        if (swe[i] > 0.001) {
+           mask[i] = 2;  // snow covered land
+        } else {
+           mask[i] = 1;  // non-snow covered land
         }
-	//ammend grids for fice
+      //}
+        if (vtype[i] == veg_type_landice) {
+           mask[i] = 0;  // land-ice
+        }
+        //ammend grids for fice
 	if (fice[i] > 0.) {
-	    mask[i] = 0;  // sea ice 
-	}
-      } else {
-	  mask[i] = -1;
+	   mask[i] = 0;  // sea ice 
+ 	}
       }
     }
 }
@@ -500,16 +497,17 @@ void apply_land_da_adjustments_soil(
 
         for (int i = 0; i < lensfc; ++i) {
             if (stc_updated[i] == 1) {
+
                 n_stc++;
-                int soiltype = isoiltype[i] - 1;   //fort to cpp
+                int soiltype_i = isoiltype[i] - 1;   //fort to cpp indexing
 
                 for (int l = 0; l < lsoil_incr; ++l) {
                     // Case 1 & 2: frozen or becoming frozen
                     if (stc_adj[i][l] < TFREEZ) {
                         // Recompute supercool liquid water, smc_adj remains unchanged
                         double smp = HFUS * (TFREEZ - stc_adj[i][l]) / (GRAV * stc_adj[i][l]);  // (m)
-                        double slc_new = maxsmc[soiltype] * 
-                                       std::pow(smp / satpsi[soiltype], -1.0 / bb[soiltype]);
+                        double slc_new = maxsmc[soiltype_i] * 
+                                       std::pow(smp / satpsi[soiltype_i], -1.0 / bb[soiltype_i]);
                         slc_adj[i][l] = std::max(std::min(slc_new, smc_adj[i][l]), 0.0);
                     }
                     // Case 3: frozen => unfrozen, melt all soil ice
@@ -544,19 +542,18 @@ void apply_land_da_adjustments_soil(
         }
     }
 
-    if (print_summary && myrank == 0) {
+    if (print_debug) {
+        std::cout << "statistics of grids number processed for rank : " << std::setw(2) << myrank << std::endl;
+        std::cout << " soil grid total" << std::setw(8) << lensfc << std::endl;
+        std::cout << " soil grid cells with slc update" << std::setw(8) << n_slc << std::endl;
+        std::cout << " soil grid cells with stc update" << std::setw(8) << n_stc << std::endl;
+    } else if (print_summary && myrank == 0) {
         std::cout << "statistics of grids number processed for rank : " << std::setw(2) << myrank << std::endl;
         std::cout << " soil grid total" << std::setw(8) << lensfc << std::endl;
         std::cout << " soil grid cells with slc update" << std::setw(8) << n_slc << std::endl;
         std::cout << " soil grid cells with stc update" << std::setw(8) << n_stc << std::endl;
     }
 
-    if (print_debug) {
-        std::cout << "statistics of grids number processed for rank : " << std::setw(2) << myrank << std::endl;
-        std::cout << " soil grid total" << std::setw(8) << lensfc << std::endl;
-        std::cout << " soil grid cells with slc update" << std::setw(8) << n_slc << std::endl;
-        std::cout << " soil grid cells with stc update" << std::setw(8) << n_stc << std::endl;
-    }
 }
 
 }  // namespace soil_increments

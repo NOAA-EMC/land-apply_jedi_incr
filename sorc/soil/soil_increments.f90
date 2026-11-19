@@ -43,7 +43,7 @@ contains
  !! applying only for NoahMP
 
 subroutine add_increment_soil(lsoil_incr,stcinc,slcinc,stc_state,smc_state,slc_state,stc_updated,&
-              slc_updated,soilsnow_tile,soilsnow_fg_tile,lensfc,lsoil,myrank, upd_stc, upd_slc, print_summary, print_debug)
+              slc_updated,soilsnow_tile,lensfc,lsoil,myrank, upd_stc, upd_slc, print_summary, print_debug)
 
     use mpi
 
@@ -51,7 +51,7 @@ subroutine add_increment_soil(lsoil_incr,stcinc,slcinc,stc_state,smc_state,slc_s
 
     integer, intent(in)      :: lsoil_incr, lensfc, lsoil, myrank
 
-    integer, intent(in)      :: soilsnow_tile(lensfc), soilsnow_fg_tile(lensfc)
+    integer, intent(in)      :: soilsnow_tile(lensfc)  !, soilsnow_fg_tile(lensfc)
     real, intent(inout)      :: stc_state(lensfc, lsoil)
     real, intent(inout)      :: slc_state(lensfc, lsoil)
     real, intent(inout)      :: smc_state(lensfc, lsoil)
@@ -59,7 +59,7 @@ subroutine add_increment_soil(lsoil_incr,stcinc,slcinc,stc_state,smc_state,slc_s
     logical, intent(in)      :: upd_stc, upd_slc, print_summary, print_debug
     
     integer                  :: ij
-    integer                  :: mask_tile, mask_fg_tile
+    integer                  :: mask_tile  !, mask_fg_tile
 
     real                     :: stcinc(lensfc,lsoil)
     real                     :: slcinc(lensfc,lsoil)
@@ -89,7 +89,7 @@ subroutine add_increment_soil(lsoil_incr,stcinc,slcinc,stc_state,smc_state,slc_s
     ij_loop : do ij = 1, lensfc
 
         mask_tile    = soilsnow_tile(ij)
-        mask_fg_tile = soilsnow_fg_tile(ij)
+        !mask_fg_tile = soilsnow_fg_tile(ij)
 
         !----------------------------------------------------------------------
         ! mask: 1  - soil, 2 - snow, 0 - land-ice, -1 - not land
@@ -104,7 +104,7 @@ subroutine add_increment_soil(lsoil_incr,stcinc,slcinc,stc_state,smc_state,slc_s
         ! if snow is present before or after snow update, skip soil analysis
         !----------------------------------------------------------------------
 
-        if (mask_fg_tile == 2 .or. mask_tile == 2) then
+        if (mask_tile == 2) then   !mask_fg_tile == 2 .or. 
          nsnowupd = nsnowupd + 1
          cycle ij_loop
         endif

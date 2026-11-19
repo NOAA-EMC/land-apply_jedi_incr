@@ -123,7 +123,7 @@ namespace landincr {
       // stype and vtype as int 
       std::vector<int> ivtype(len_land_vec, -1);
       std::vector<int> istype(len_land_vec, -1);
-      std::vector<int> soil_mask(len_land_vec, -1);  //default -1 not land
+      std::vector<int> soil_mask(len_land_vec, -1);  // 
 
       for (int i = 0; i < len_land_vec; ++i) {
         ivtype[i] = static_cast<int>(bkgv_vtype(i, 0));
@@ -192,7 +192,7 @@ namespace landincr {
       //    bkg_stc, bkg_slc, bkg_smc, stc_inc, slc_inc,       
       //    stc_updated, slc_updated  );
       soil_increments::add_increment_soil(lsoil_incr,stc_inc, slc_inc,bkg_stc, bkg_smc, bkg_slc, 
-		       stc_updated, slc_updated, soil_mask, soil_mask, len_land_vec, lsoil, myrank, 
+		       stc_updated, slc_updated, soil_mask, len_land_vec, lsoil, myrank, 
 		       upd_stc, upd_slc, print_summary, print_debug);
 
       // post-increment adjustments to ensure consistency b/n soil T and soil M

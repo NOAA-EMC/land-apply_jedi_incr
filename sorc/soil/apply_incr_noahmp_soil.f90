@@ -174,7 +174,7 @@ program apply_incr_noahmp_soil
 
         call add_increment_soil(lsoil_incr,noahmp_state%stc_inc,noahmp_state%slc_inc, &
                noahmp_state%stc,noahmp_state%smc,noahmp_state%slc,&
-               noahmp_state%stc_updated,noahmp_state%slc_updated,noahmp_state%soilsnow_tile,noahmp_state%soilsnow_tile,&
+               noahmp_state%stc_updated,noahmp_state%slc_updated,noahmp_state%soilsnow_tile, & !noahmp_state%soilsnow_tile,&
                len_land_vec,lsoil,myrank, upd_stc, upd_slc, print_summary, print_debug)
         
        !call calculate_landinc_mask(noahmp_state%swe,noahmp_state%vtype,noahmp_state%stype,&
